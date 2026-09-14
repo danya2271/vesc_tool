@@ -59,6 +59,7 @@ ${BOLD}USAGE:${NC}
 ${BOLD}OPTIONS:${NC}
   -d, --desktop         Build desktop GUI version (default)
   -m, --mobile          Build mobile GUI version (standalone)
+  -a, --apk, --android  Build Android APK (delegates to ./build_android.sh)
   -c, --clean           Perform a clean before building
       --clean-only      Clean build artifacts and exit
   -j, --jobs <N>        Number of parallel make jobs (default: ${DEFAULT_JOBS})
@@ -70,6 +71,7 @@ ${BOLD}OPTIONS:${NC}
 ${BOLD}EXAMPLES:${NC}
   ./build.sh                     # Quick build desktop version
   ./build.sh --mobile            # Build standalone mobile version
+  ./build.sh --apk               # Build Android APK (mobile)
   ./build.sh --clean --run       # Clean build desktop and launch
   ./build.sh --mobile --run      # Build and launch mobile UI"
 }
@@ -77,6 +79,10 @@ ${BOLD}EXAMPLES:${NC}
 # Parse command line options
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --apk|--android|apk|android)
+            shift
+            exec "$SCRIPT_DIR/build_android.sh" "$@"
+            ;;
         -d|--desktop|desktop)
             TARGET_MODE="desktop"
             shift
