@@ -334,8 +334,8 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
         mSettings.endArray();
     }
     
-    QLocale systemLocale;
-    bool useImperialByDefault = systemLocale.measurementSystem() == QLocale::ImperialSystem;
+    // Default to metric units (km/h)
+    bool useImperialByDefault = false;
 
     mUseImperialUnits = mSettings.value("useImperialUnits", useImperialByDefault).toBool();
     mKeepScreenOn = mSettings.value("keepScreenOn", true).toBool();

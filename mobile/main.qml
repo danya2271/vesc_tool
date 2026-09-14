@@ -42,6 +42,15 @@ ApplicationWindow {
     width: 500
     height: 850
     title: qsTr("VESC Tool")
+    color: "#000000"
+
+    background: Rectangle {
+        color: "#000000"
+        x: -20
+        y: -20
+        width: parent.width + 40
+        height: parent.height + 40
+    }
 
     // Full screen iPhone X workaround:
     property int notchLeft: 0
@@ -49,6 +58,21 @@ ApplicationWindow {
     property int notchBot: 0
     property int notchTop: 0
     property bool mainIsHorizontal: appWindow.width > appWindow.height
+    property bool isFullscreenHud: false
+
+    function toggleFullscreenHud() {
+        setFullscreenHud(!isFullscreenHud)
+    }
+
+    function setFullscreenHud(enable) {
+        if (isFullscreenHud === enable) return
+        isFullscreenHud = enable
+        if (enable) {
+            appWindow.visibility = Window.FullScreen
+        } else {
+            appWindow.visibility = Window.AutomaticVisibility
+        }
+    }
 
     // https://github.com/ekke/c2gQtWS_x/blob/master/qml/main.qml
     flags: Qt.platform.os === "ios" ? (Qt.Window | Qt.MaximizeUsingFullscreenGeometryHint) : Qt.Window
@@ -271,9 +295,19 @@ ApplicationWindow {
     SwipeView {
         id: mainSwipeView
         currentIndex: tabBar.currentIndex
+        padding: 0
+        leftPadding: 0
+        rightPadding: 0
+        topPadding: 0
+        bottomPadding: 0
+        onCurrentIndexChanged: {
+            if (isFullscreenHud && currentIndex !== (1 + indexOffset())) {
+                setFullscreenHud(false)
+            }
+        }
         anchors.fill: parent
-        anchors.leftMargin: notchLeft*0.75
-        anchors.rightMargin: notchRight*0.75
+        anchors.leftMargin: isFullscreenHud ? 0 : Math.round(notchLeft * 0.75)
+        anchors.rightMargin: isFullscreenHud ? 0 : Math.round(notchRight * 0.75)
         clip: true
         contentItem: ListView {
             model: mainSwipeView.contentModel
@@ -323,25 +357,48 @@ ApplicationWindow {
 
         Page {
             id: rtDataPage
+            padding: 0
+            leftPadding: 0
+            rightPadding: 0
+            topPadding: 0
+            bottomPadding: 0
+            background: Rectangle {
+                color: "#000000"
+                x: -20
+                y: -20
+                width: parent.width + 40
+                height: parent.height + 40
+            }
 
             PageIndicator {
                 count: rtSwipeView.count
                 currentIndex: rtSwipeView.currentIndex
                 anchors.right: parent.right
-                width:25
+                width: 25
                 anchors.verticalCenter: parent.verticalCenter
-                anchors.verticalCenterOffset: parent.height*0.4
+                anchors.verticalCenterOffset: parent.height * 0.4
                 rotation: 90
-                z:2
+                z: 2
+                visible: !isFullscreenHud && rtSwipeView.currentIndex !== 4
             }
 
             SwipeView {
                 id: rtSwipeView
+                padding: 0
+                leftPadding: 0
+                rightPadding: 0
+                topPadding: 0
+                bottomPadding: 0
                 enabled: true
                 clip: true
                 currentIndex: 1
                 anchors.fill:parent
                 orientation: Qt.Vertical
+                onCurrentIndexChanged: {
+                    if (isFullscreenHud && currentIndex !== 4) {
+                        setFullscreenHud(false)
+                    }
+                }
 
                 contentItem: ListView {
                     model: rtSwipeView.contentModel
@@ -443,6 +500,18 @@ ApplicationWindow {
                 }
                 Page {
                     id: blackGreenRedPage
+                    padding: 0
+                    leftPadding: 0
+                    rightPadding: 0
+                    topPadding: 0
+                    bottomPadding: 0
+                    background: Rectangle {
+                        color: "#000000"
+                        x: -20
+                        y: -20
+                        width: parent.width + 40
+                        height: parent.height + 40
+                    }
                     Loader {
                         anchors.fill: parent
                         asynchronous: true
@@ -452,6 +521,10 @@ ApplicationWindow {
                             dialogParent: mainSwipeView
                             updateData: tabBar.currentIndex == (1 + indexOffset()) && rtSwipeView.currentIndex == 4
                             isHorizontal: mainIsHorizontal
+                            isFullscreen: isFullscreenHud
+                            onFullscreenToggleRequested: {
+                                toggleFullscreenHud()
+                            }
                         }
                     }
                 }
@@ -515,8 +588,9 @@ ApplicationWindow {
 
     header: Rectangle {
         id: headerBar
+        visible: !isFullscreenHud
         color: Utility.getAppHexColor("lightestBackground")
-        height: tabBar.implicitHeight + notchTop // iPhone X Workaround
+        height: isFullscreenHud ? 0 : (tabBar.implicitHeight + notchTop) // iPhone X Workaround
 
         RowLayout {
             anchors.left: parent.left
@@ -672,10 +746,11 @@ ApplicationWindow {
 
     footer: Rectangle {
         id: connectedRect
+        visible: !isFullscreenHud
         clip: true
         color: Utility.getAppHexColor("lightBackground")
         width: parent.width
-        height: 35 + notchBot
+        height: isFullscreenHud ? 0 : (35 + notchBot)
         Rectangle {
             anchors.left: parent.left
             anchors.right: parent.right

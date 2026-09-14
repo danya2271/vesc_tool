@@ -44,7 +44,14 @@ bool QmlUi::startQmlUi()
     qmlRegisterSingletonType<Utility>("Vedder.vesc.utility", 1, 0, "Utility", utility_singletontype_provider);
 
     mEngine->load(QUrl(QLatin1String("qrc:/mobile/main.qml")));
-    return !mEngine->rootObjects().isEmpty();
+    if (!mEngine->rootObjects().isEmpty()) {
+        QQuickWindow *win = qobject_cast<QQuickWindow*>(mEngine->rootObjects().first());
+        if (win) {
+            win->setColor(QColor(0, 0, 0));
+        }
+        return true;
+    }
+    return false;
 }
 
 bool QmlUi::eventFilter(QObject *object, QEvent *e)
