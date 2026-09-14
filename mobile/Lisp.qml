@@ -21,6 +21,9 @@ Item {
     property real lispCpuUse: 0
     property real lispHeapUse: 0
     property real lispMemUse: 0
+    property real lispStackUse: 0
+    property string lispDoneCtxR: ""
+    property bool lispHeaderStatsVisible: true
     property int statsPollHz: 2
     property int editorFontSize: 12
 
@@ -259,11 +262,9 @@ Item {
         id: statsPollTimer
         interval: Math.max(50, Math.round(1000 / Math.max(1, statsPollHz)))
         repeat: true
-        running: true
+        running: lispPageItem.visible && VescIf.isPortConnected() && pollStatsBox.checked
         onTriggered: {
-            if (VescIf.isPortConnected() &&
-                    pollStatsBox.checked &&
-                    statsTabItem.visible) {
+            if (VescIf.isPortConnected() && pollStatsBox.checked) {
                 mCommands.lispGetStats(true)
             }
         }
@@ -276,6 +277,77 @@ Item {
         anchors.leftMargin: 10 + notchLeft
         anchors.rightMargin: 10 + notchRight
         spacing: 0
+
+        // Live Telemetry Banner
+        Rectangle {
+            Layout.fillWidth: true
+            Layout.preferredHeight: 26
+            color: "#161b17"
+            radius: 3
+            visible: lispHeaderStatsVisible
+
+            RowLayout {
+                anchors.fill: parent
+                anchors.leftMargin: 8
+                anchors.rightMargin: 8
+                spacing: 10
+
+                RowLayout {
+                    spacing: 4
+                    Label {
+                        text: "CPU:"
+                        font.pixelSize: 11
+                        color: "#9e9e9e"
+                    }
+                    Label {
+                        text: lispCpuUse.toFixed(1) + "%"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: lispCpuUse > 85 ? "#ff5252" : (lispCpuUse > 60 ? "#ffb300" : "#00e676")
+                    }
+                }
+
+                RowLayout {
+                    spacing: 4
+                    Label {
+                        text: "Heap:"
+                        font.pixelSize: 11
+                        color: "#9e9e9e"
+                    }
+                    Label {
+                        text: lispHeapUse.toFixed(1) + "%"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: lispHeapUse > 85 ? "#ff5252" : (lispHeapUse > 60 ? "#ffb300" : "#00e676")
+                    }
+                }
+
+                RowLayout {
+                    spacing: 4
+                    Label {
+                        text: "Mem:"
+                        font.pixelSize: 11
+                        color: "#9e9e9e"
+                    }
+                    Label {
+                        text: lispMemUse.toFixed(1) + "%"
+                        font.pixelSize: 11
+                        font.bold: true
+                        color: lispMemUse > 85 ? "#ff5252" : (lispMemUse > 60 ? "#ffb300" : "#00e676")
+                    }
+                }
+
+                Item { Layout.fillWidth: true }
+
+                Label {
+                    text: lispDoneCtxR.length > 0 ? ("Res: " + lispDoneCtxR) : ""
+                    font.pixelSize: 10
+                    color: "#80cbc4"
+                    elide: Text.ElideRight
+                    Layout.maximumWidth: 140
+                }
+            }
+        }
 
         TabBar {
             id: lispTabBar
@@ -582,45 +654,113 @@ Item {
             // === Stats tab ===
             ColumnLayout {
                 id: statsTabItem
+                spacing: 8
 
-                Label {
-                    text: "CPU: " + lispCpuUse.toFixed(1) + "%"
-                }
-
-                ProgressBar {
+                GridLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 10
-                    from: 0
-                    to: 100
-                    value: lispCpuUse
+                    columns: 2
+                    rowSpacing: 4
+                    columnSpacing: 10
+
+                    Label {
+                        text: "CPU Usage:"
+                        font.bold: true
+                    }
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: lispCpuUse.toFixed(1) + "%"
+                        font.bold: true
+                        color: lispCpuUse > 85 ? "#ff5252" : (lispCpuUse > 60 ? "#ffb300" : "#00e676")
+                    }
+
+                    ProgressBar {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 8
+                        from: 0
+                        to: 100
+                        value: lispCpuUse
+                    }
+
+                    Label {
+                        text: "Heap Usage:"
+                        font.bold: true
+                    }
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: lispHeapUse.toFixed(1) + "%"
+                        font.bold: true
+                        color: lispHeapUse > 85 ? "#ff5252" : (lispHeapUse > 60 ? "#ffb300" : "#00e676")
+                    }
+
+                    ProgressBar {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 8
+                        from: 0
+                        to: 100
+                        value: lispHeapUse
+                    }
+
+                    Label {
+                        text: "Memory Usage:"
+                        font.bold: true
+                    }
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: lispMemUse.toFixed(1) + "%"
+                        font.bold: true
+                        color: lispMemUse > 85 ? "#ff5252" : (lispMemUse > 60 ? "#ffb300" : "#00e676")
+                    }
+
+                    ProgressBar {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 8
+                        from: 0
+                        to: 100
+                        value: lispMemUse
+                    }
+
+                    Label {
+                        text: "Stack Usage:"
+                        font.bold: true
+                    }
+                    Label {
+                        Layout.alignment: Qt.AlignRight
+                        text: lispStackUse.toFixed(1) + "%"
+                        font.bold: true
+                        color: lispStackUse > 85 ? "#ff5252" : (lispStackUse > 60 ? "#ffb300" : "#00e676")
+                    }
+
+                    ProgressBar {
+                        Layout.columnSpan: 2
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 8
+                        from: 0
+                        to: 100
+                        value: lispStackUse
+                    }
                 }
 
-                Label {
-                    text: "Heap: " + lispHeapUse.toFixed(1) + "%"
-                }
-
-                ProgressBar {
+                RowLayout {
                     Layout.fillWidth: true
-                    Layout.preferredHeight: 10
-                    from: 0
-                    to: 100
-                    value: lispHeapUse
+                    visible: lispDoneCtxR.length > 0
+                    Label {
+                        text: "Last Eval Result:"
+                        font.bold: true
+                    }
+                    Label {
+                        Layout.fillWidth: true
+                        text: lispDoneCtxR
+                        color: "#80cbc4"
+                        elide: Text.ElideRight
+                    }
                 }
 
                 Label {
-                    text: "Memory: " + lispMemUse.toFixed(1) + "%"
-                }
-
-                ProgressBar {
-                    Layout.fillWidth: true
-                    Layout.preferredHeight: 10
-                    from: 0
-                    to: 100
-                    value: lispMemUse
-                }
-
-                Label {
-                    text: "Global Variables"
+                    text: "Global Variables (" + bindingModel.count + ")"
+                    font.bold: true
                     Layout.fillWidth: true
                 }
 
@@ -721,6 +861,14 @@ Item {
                 lispMemUse = stats.mem_use
             }
 
+            if (stats.stack_use !== undefined) {
+                lispStackUse = stats.stack_use
+            }
+
+            if (stats.done_ctx_r !== undefined) {
+                lispDoneCtxR = stats.done_ctx_r
+            }
+
             bindingModel.clear()
 
             if (stats.globals === undefined || stats.globals === null || !Array.isArray(stats.globals)) {
@@ -732,6 +880,24 @@ Item {
                 if (g.name !== undefined && g.value !== undefined) {
                     bindingModel.append({"name": g.name, "value": g.value})
                 }
+            }
+        }
+
+        function onLispStatsRx(stats) {
+            if (stats.cpu_use !== undefined) {
+                lispCpuUse = stats.cpu_use
+            }
+            if (stats.heap_use !== undefined) {
+                lispHeapUse = stats.heap_use
+            }
+            if (stats.mem_use !== undefined) {
+                lispMemUse = stats.mem_use
+            }
+            if (stats.stack_use !== undefined) {
+                lispStackUse = stats.stack_use
+            }
+            if (stats.done_ctx_r !== undefined) {
+                lispDoneCtxR = stats.done_ctx_r
             }
         }
     }

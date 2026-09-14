@@ -53,3 +53,7 @@ res/firmwares/*/
 
 # Nix output
 /result
+
+# VS Code
+.vscode/
+

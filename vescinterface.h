@@ -180,6 +180,7 @@ public:
 
     // Connection
     Q_INVOKABLE bool isPortConnected();
+    Q_INVOKABLE bool isBleConnected();
     Q_INVOKABLE void disconnectPort();
     Q_INVOKABLE bool reconnectLastPort();
     Q_INVOKABLE bool lastPortAvailable();

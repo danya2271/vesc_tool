@@ -2239,6 +2239,15 @@ bool VescInterface::isPortConnected()
     return res;
 }
 
+bool VescInterface::isBleConnected()
+{
+#ifdef HAS_BLUETOOTH
+    return mBleUart && mBleUart->isConnected();
+#else
+    return false;
+#endif
+}
+
 void VescInterface::disconnectPort()
 {
 #ifdef HAS_SERIALPORT

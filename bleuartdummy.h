@@ -31,6 +31,7 @@ public:
 
     Q_INVOKABLE void startScan();
     Q_INVOKABLE void emitScanDone();
+    Q_INVOKABLE bool isConnected() { return false; }
 
 signals:
     void scanDone(QVariantMap devs, bool done);

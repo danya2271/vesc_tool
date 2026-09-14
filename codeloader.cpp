@@ -430,8 +430,8 @@ bool CodeLoader::lispUpload(VByteArray vb)
     quint32 offset = 0;
     bool ok = true;
     mAbortDownloadUpload = false;
+    const int chunkSize = (mVesc && mVesc->isBleConnected()) ? 128 : 384;
     while (data.size() > 0 && !mAbortDownloadUpload) {
-        const int chunkSize = 384;
         int sz = data.size() > chunkSize ? chunkSize : data.size();
 
         if (writeChunk(data.mid(0, sz), offset) < 0) {
@@ -516,8 +516,8 @@ bool CodeLoader::lispStream(VByteArray vb, qint8 mode)
     qint32 offset = 0;
     qint32 size_tot = vb.size();
     bool ok = true;
+    const int chunkSize = (mVesc && mVesc->isBleConnected()) ? 128 : 384;
     while (vb.size() > 0) {
-        const int chunkSize = 384;
         int sz = vb.size() > chunkSize ? chunkSize : vb.size();
 
         mVesc->commands()->lispStreamCode(vb.mid(0, sz), offset, size_tot, mode);
@@ -796,8 +796,8 @@ bool CodeLoader::qmlUpload(QByteArray script, bool isFullscreen)
 
     quint32 offset = 0;
     bool ok = true;
+    const int chunkSize = (mVesc && mVesc->isBleConnected()) ? 128 : 384;
     while (data.size() > 0) {
-        const int chunkSize = 384;
         int sz = data.size() > chunkSize ? chunkSize : data.size();
 
         if (writeChunk(data.mid(0, sz), offset) < 0) {

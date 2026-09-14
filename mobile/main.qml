@@ -441,6 +441,21 @@ ApplicationWindow {
                         }
                     }
                 }
+                Page {
+                    id: blackGreenRedPage
+                    Loader {
+                        anchors.fill: parent
+                        asynchronous: true
+                        visible: status == Loader.Ready
+                        sourceComponent: RtDataBlackGreenRed {
+                            anchors.fill: parent
+                            dialogParent: mainSwipeView
+                            updateData: tabBar.currentIndex == (1 + indexOffset()) && rtSwipeView.currentIndex == 4
+                            isHorizontal: mainIsHorizontal
+                        }
+                    }
+                }
+
             }
         }
 
@@ -890,6 +905,11 @@ ApplicationWindow {
                         mCommands.getValuesSetupSelective(0x7E00)
                         mCommands.getStats(0xFFFFFFFF)
                     }
+                    if (mainSwipeView.currentItem == rtDataPage && rtSwipeView.currentIndex == 4) {
+                        interval = 50
+                        mCommands.getValuesSetup()
+                    }
+
 
                     if (mainSwipeView.currentItem == bmsPage) {
                         interval = 100
