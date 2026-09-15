@@ -513,6 +513,7 @@ ApplicationWindow {
                         height: parent.height + 40
                     }
                     Loader {
+                        id: hudBlackGreenRedLoader
                         anchors.fill: parent
                         asynchronous: true
                         visible: status == Loader.Ready
@@ -524,6 +525,16 @@ ApplicationWindow {
                             isFullscreen: isFullscreenHud
                             onFullscreenToggleRequested: {
                                 toggleFullscreenHud()
+                            }
+                        }
+                    }
+                    Connections {
+                        target: hudBlackGreenRedLoader.item
+                        ignoreUnknownSignals: true
+                        function onPollIntervalChanged() {
+                            if (mainSwipeView.currentItem == rtDataPage && rtSwipeView.currentIndex == 4 && hudBlackGreenRedLoader.item) {
+                                rtTimer.interval = hudBlackGreenRedLoader.item.pollInterval
+                                rtTimer.restart()
                             }
                         }
                     }
@@ -981,7 +992,8 @@ ApplicationWindow {
                         mCommands.getStats(0xFFFFFFFF)
                     }
                     if (mainSwipeView.currentItem == rtDataPage && rtSwipeView.currentIndex == 4) {
-                        interval = 50
+                        interval = (hudBlackGreenRedLoader.item && hudBlackGreenRedLoader.item.pollInterval > 0) ?
+                                    hudBlackGreenRedLoader.item.pollInterval : 50
                         mCommands.getValuesSetup()
                     }
 

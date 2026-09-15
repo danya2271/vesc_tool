@@ -58,6 +58,10 @@ Item {
     property real erpmRedPowerThreshold: 600.0
     property real erpmLowRange: 3000.0
 
+    // Speed Smoothing & Telemetry Polling Rate Settings
+    property real speedSmoothing: 0.0 // 0.0 = direct raw telemetry, 0.1-0.9 = smoothed
+    property int pollInterval: 50 // ms (20ms to 500ms)
+
     // Live Telemetry Values
     property real voltageIn: 0.0
     property real batteryPercent: 0.0
@@ -140,6 +144,8 @@ Item {
         property real erpmLowRange: 3000.0
         property bool isMinimalView: false
         property real tripDistanceOffset: 0.0
+        property real speedSmoothing: 0.0
+        property int pollInterval: 50
     }
 
     Component.onCompleted: {
@@ -155,6 +161,8 @@ Item {
         erpmLowRange = hudSettings.erpmLowRange > 0 ? hudSettings.erpmLowRange : 3000.0;
         isMinimalView = hudSettings.isMinimalView;
         tripDistanceOffset = hudSettings.tripDistanceOffset;
+        speedSmoothing = (hudSettings.speedSmoothing !== undefined && hudSettings.speedSmoothing >= 0) ? hudSettings.speedSmoothing : 0.0;
+        pollInterval = (hudSettings.pollInterval && hudSettings.pollInterval >= 20) ? hudSettings.pollInterval : 50;
     }
 
     function drawErpmSpeedo(canvas, ctx) {
@@ -188,6 +196,9 @@ Item {
         ctx.arc(cx, cy, r, startAngle, endAngle, false);
         ctx.stroke();
 
+        var absErpm = Math.abs(erpmNow);
+        var safeMax = Math.max(100.0, erpmMax);
+
         // Subtle tick marks along the arc at 0%, 25%, 50%, 75%, 100%
         for (var i = 0; i <= 4; i++) {
             var frac = i / 4.0;
@@ -206,9 +217,14 @@ Item {
             ctx.stroke();
         }
 
+        ctx.font = "bold 9px Roboto";
+        ctx.fillStyle = "#34663e";
+        ctx.textAlign = "center";
+        ctx.fillText("0", x1, yEnds + 10);
+        var maxK = (safeMax >= 1000) ? Math.round(safeMax / 1000) + "k" : safeMax;
+        ctx.fillText(maxK, x2, yEnds + 10);
+
         // 2. Active ERPM Progress
-        var absErpm = Math.abs(erpmNow);
-        var safeMax = Math.max(100.0, erpmMax);
         var ratio = Math.max(0.0, Math.min(1.0, absErpm / safeMax));
 
         if (ratio > 0.002) {
@@ -458,7 +474,7 @@ Item {
                     // Speed Card with Speedometer ERPM
                     Rectangle {
                         Layout.fillWidth: true
-                        height: 230
+                        height: 245
                         color: colCardBg
                         border.color: colCardBorder
                         border.width: 1
@@ -546,31 +562,46 @@ Item {
                                 Row {
                                     spacing: 4
                                     Rectangle {
-                                        width: 8; height: 8; radius: 4
+                                        width: 10; height: 10; radius: 5
                                         anchors.verticalCenter: parent.verticalCenter
                                         color: erpmNow > 10 ? colNeonGreen : (erpmNow < -10 ? colVividRed : colTextDim)
                                     }
                                     Text {
                                         anchors.verticalCenter: parent.verticalCenter
                                         text: erpmNow > 10 ? "FWD" : (erpmNow < -10 ? "REV" : "NEUT")
-                                        font.bold: true; font.pixelSize: 11
+                                        font.bold: true; font.pixelSize: 12
                                         color: erpmNow > 10 ? colNeonGreen : (erpmNow < -10 ? colVividRed : colTextDim)
                                     }
                                 }
 
                                 Item { Layout.fillWidth: true }
 
-                                Text {
-                                    text: Math.round(Math.abs(erpmNow)).toLocaleString() + " / " + Math.round(erpmMax).toLocaleString() + " ERPM"
-                                    font.bold: true; font.pixelSize: 12
-                                    color: isHighLoadAtLowRpm ? colVividRed : colNeonGreen
+                                Row {
+                                    spacing: 4
+                                    Layout.alignment: Qt.AlignHCenter
+                                    Text {
+                                        text: Math.round(Math.abs(erpmNow)).toLocaleString()
+                                        font.bold: true
+                                        font.pixelSize: 22
+                                        font.family: "Roboto"
+                                        color: isHighLoadAtLowRpm ? colVividRed : colNeonGreen
+                                    }
+                                    Text {
+                                        anchors.bottom: parent.bottom
+                                        anchors.bottomMargin: 3
+                                        text: " / " + Math.round(erpmMax).toLocaleString() + " ERPM"
+                                        font.bold: true
+                                        font.pixelSize: 13
+                                        font.family: "Roboto"
+                                        color: colTextDim
+                                    }
                                 }
 
                                 Item { Layout.fillWidth: true }
 
                                 Text {
                                     text: "Duty: " + (dutyNow * 100.0).toFixed(1) + "%"
-                                    font.pixelSize: 11; color: colTextDim
+                                    font.pixelSize: 12; font.bold: true; color: colTextDim
                                 }
                             }
 
@@ -839,7 +870,7 @@ Item {
                 // Large Minimal Speed Card with Speedometer ERPM
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 230
+                    height: 245
                     color: colCardBg
                     border.color: colCardBorder
                     border.width: 1
@@ -912,17 +943,49 @@ Item {
                             Layout.leftMargin: 8
                             Layout.rightMargin: 8
 
-                            Text {
-                                text: (erpmNow >= 0 ? "FWD • " : "REV • ") + Math.round(Math.abs(erpmNow)).toLocaleString() + " ERPM"
-                                font.bold: true; font.pixelSize: 12
-                                color: isHighLoadAtLowRpm ? colVividRed : colNeonGreen
+                            Row {
+                                spacing: 4
+                                Rectangle {
+                                    width: 10; height: 10; radius: 5
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    color: erpmNow > 10 ? colNeonGreen : (erpmNow < -10 ? colVividRed : colTextDim)
+                                }
+                                Text {
+                                    anchors.verticalCenter: parent.verticalCenter
+                                    text: erpmNow > 10 ? "FWD" : (erpmNow < -10 ? "REV" : "NEUT")
+                                    font.bold: true; font.pixelSize: 12
+                                    color: erpmNow > 10 ? colNeonGreen : (erpmNow < -10 ? colVividRed : colTextDim)
+                                }
+                            }
+
+                            Item { Layout.fillWidth: true }
+
+                            Row {
+                                spacing: 4
+                                Layout.alignment: Qt.AlignHCenter
+                                Text {
+                                    text: Math.round(Math.abs(erpmNow)).toLocaleString()
+                                    font.bold: true
+                                    font.pixelSize: 22
+                                    font.family: "Roboto"
+                                    color: isHighLoadAtLowRpm ? colVividRed : colNeonGreen
+                                }
+                                Text {
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: 3
+                                    text: " / " + Math.round(erpmMax).toLocaleString() + " ERPM"
+                                    font.bold: true
+                                    font.pixelSize: 13
+                                    font.family: "Roboto"
+                                    color: colTextDim
+                                }
                             }
 
                             Item { Layout.fillWidth: true }
 
                             Text {
                                 text: "Duty: " + (dutyNow * 100.0).toFixed(1) + "%"
-                                font.pixelSize: 11; color: colTextDim
+                                font.pixelSize: 12; font.bold: true; color: colTextDim
                             }
                         }
 
@@ -1099,7 +1162,7 @@ Item {
                 // Full Speed & Speedometer ERPM Card
                 Rectangle {
                     Layout.fillWidth: true
-                    height: 240
+                    height: 250
                     color: colCardBg
                     border.color: colCardBorder
                     border.width: 1
@@ -1186,31 +1249,46 @@ Item {
                             Row {
                                 spacing: 4
                                 Rectangle {
-                                    width: 8; height: 8; radius: 4
+                                    width: 10; height: 10; radius: 5
                                     anchors.verticalCenter: parent.verticalCenter
                                     color: erpmNow > 10 ? colNeonGreen : (erpmNow < -10 ? colVividRed : colTextDim)
                                 }
                                 Text {
                                     anchors.verticalCenter: parent.verticalCenter
                                     text: erpmNow > 10 ? "FWD" : (erpmNow < -10 ? "REV" : "NEUT")
-                                    font.bold: true; font.pixelSize: 11
+                                    font.bold: true; font.pixelSize: 12
                                     color: erpmNow > 10 ? colNeonGreen : (erpmNow < -10 ? colVividRed : colTextDim)
                                 }
                             }
 
                             Item { Layout.fillWidth: true }
 
-                            Text {
-                                text: Math.round(Math.abs(erpmNow)).toLocaleString() + " / " + Math.round(erpmMax).toLocaleString() + " ERPM"
-                                font.bold: true; font.pixelSize: 12
-                                color: isHighLoadAtLowRpm ? colVividRed : colNeonGreen
+                            Row {
+                                spacing: 4
+                                Layout.alignment: Qt.AlignHCenter
+                                Text {
+                                    text: Math.round(Math.abs(erpmNow)).toLocaleString()
+                                    font.bold: true
+                                    font.pixelSize: 22
+                                    font.family: "Roboto"
+                                    color: isHighLoadAtLowRpm ? colVividRed : colNeonGreen
+                                }
+                                Text {
+                                    anchors.bottom: parent.bottom
+                                    anchors.bottomMargin: 3
+                                    text: " / " + Math.round(erpmMax).toLocaleString() + " ERPM"
+                                    font.bold: true
+                                    font.pixelSize: 13
+                                    font.family: "Roboto"
+                                    color: colTextDim
+                                }
                             }
 
                             Item { Layout.fillWidth: true }
 
                             Text {
                                 text: "Duty: " + (dutyNow * 100.0).toFixed(1) + "%"
-                                font.pixelSize: 11; color: colTextDim
+                                font.pixelSize: 12; font.bold: true; color: colTextDim
                             }
                         }
 
@@ -1621,7 +1699,81 @@ Item {
                             }
                         }
 
-                        // --- SECTION 3: ERPM SPEEDOMETER GAUGE SETTINGS ---
+                        // --- SECTION 3: SPEED SMOOTHING & TELEMETRY ---
+                        GroupBox {
+                            title: "Speed Smoothing & Polling / Сглаживание и опрос"
+                            Layout.fillWidth: true
+
+                            ColumnLayout {
+                                anchors.fill: parent
+                                spacing: 8
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Speed Smoothing / Сглаживание:"
+                                        color: colTextWhite
+                                        font.pixelSize: 12
+                                        Layout.fillWidth: true
+                                    }
+                                    SpinBox {
+                                        id: spinSmoothing
+                                        from: 0; to: 90; stepSize: 5
+                                        value: Math.round(speedSmoothing * 100)
+                                        textFromValue: function(val) {
+                                            return val === 0 ? "Off (0%)" : val + "%";
+                                        }
+                                        valueFromText: function(txt) {
+                                            return parseInt(txt);
+                                        }
+                                        Layout.preferredWidth: 140
+                                        onValueChanged: {
+                                            speedSmoothing = value / 100.0;
+                                            hudSettings.speedSmoothing = speedSmoothing;
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "0% = direct raw speed, 20-50% = smooth jitter-free speed."
+                                    font.pixelSize: 10; color: colTextDim
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
+                                    Text {
+                                        text: "Polling Rate / Частота опроса:"
+                                        color: colTextWhite
+                                        font.pixelSize: 12
+                                        Layout.fillWidth: true
+                                    }
+                                    SpinBox {
+                                        id: spinPollRate
+                                        from: 20; to: 500; stepSize: 10
+                                        value: pollInterval
+                                        textFromValue: function(val) {
+                                            var hz = Math.round(1000.0 / val);
+                                            return hz + " Hz (" + val + " ms)";
+                                        }
+                                        valueFromText: function(txt) {
+                                            return parseInt(txt);
+                                        }
+                                        Layout.preferredWidth: 140
+                                        onValueChanged: {
+                                            pollInterval = value;
+                                            hudSettings.pollInterval = value;
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "BLE/USB update interval (Default: 50 ms / 20 Hz, Fast: 20 ms / 50 Hz)."
+                                    font.pixelSize: 10; color: colTextDim
+                                }
+                            }
+                        }
+
+                        // --- SECTION 4: ERPM SPEEDOMETER GAUGE SETTINGS ---
                         GroupBox {
                             title: "ERPM Gauge Settings / Настройки ERPM"
                             Layout.fillWidth: true
@@ -1682,7 +1834,7 @@ Item {
                             }
                         }
 
-                        // --- SECTION 4: BATTERY & CUTOFF SETTINGS ---
+                        // --- SECTION 5: BATTERY & CUTOFF SETTINGS ---
                         GroupBox {
                             title: "Battery & Cutoff / Батарея и отсечка"
                             Layout.fillWidth: true
@@ -1743,7 +1895,7 @@ Item {
                             }
                         }
 
-                        // --- SECTION 5: RESETS ---
+                        // --- SECTION 6: RESETS ---
                         GroupBox {
                             title: "Reset Stats / Сброс статистики"
                             Layout.fillWidth: true
@@ -1823,7 +1975,16 @@ Item {
                     spd = speedKmh * impFact;
                 }
             }
-            speedNow = Math.abs(spd);
+            var rawSpeed = Math.abs(spd);
+            if (speedSmoothing <= 0.01) {
+                speedNow = rawSpeed;
+            } else {
+                if (rawSpeed < 0.1 && speedNow < 0.5) {
+                    speedNow = 0.0;
+                } else {
+                    speedNow = (speedNow * speedSmoothing) + (rawSpeed * (1.0 - speedSmoothing));
+                }
+            }
             if (speedNow > speedMax) speedMax = speedNow;
 
             // Electrical Motor Power (V * I)
