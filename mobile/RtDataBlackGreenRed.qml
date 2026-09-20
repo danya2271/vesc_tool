@@ -52,6 +52,7 @@ Item {
     property real customCutoffStart: -1.0
     property real customCutoffEnd: -1.0
     property int customSeriesCells: 0
+    property real voltageOffset: 0.0
 
     // ERPM Speedometer Settings
     property real erpmMax: 20000.0
@@ -146,6 +147,7 @@ Item {
         property real tripDistanceOffset: 0.0
         property real speedSmoothing: 0.0
         property int pollInterval: 50
+        property real voltageOffset: 0.0
     }
 
     Component.onCompleted: {
@@ -163,6 +165,7 @@ Item {
         tripDistanceOffset = hudSettings.tripDistanceOffset;
         speedSmoothing = (hudSettings.speedSmoothing !== undefined && hudSettings.speedSmoothing >= 0) ? hudSettings.speedSmoothing : 0.0;
         pollInterval = (hudSettings.pollInterval && hudSettings.pollInterval >= 20) ? hudSettings.pollInterval : 50;
+        voltageOffset = (hudSettings.voltageOffset !== undefined) ? hudSettings.voltageOffset : 0.0;
     }
 
     function drawErpmSpeedo(canvas, ctx) {
@@ -679,7 +682,12 @@ Item {
                                 Layout.fillWidth: true
                                 ColumnLayout {
                                     spacing: 1
-                                    Text { text: "BATTERY VOLTAGE"; font.pixelSize: 10; font.bold: true; color: colTextDim }
+                                    Text {
+                                        text: Math.abs(voltageOffset) > 0.001 ?
+                                              ("BATTERY VOLTAGE (" + (voltageOffset > 0 ? "+" : "") + voltageOffset.toFixed(2) + "V)") :
+                                              "BATTERY VOLTAGE"
+                                        font.pixelSize: 10; font.bold: true; color: colTextDim
+                                    }
                                     Row {
                                         spacing: 4
                                         Text {
@@ -1074,7 +1082,12 @@ Item {
                             Layout.fillWidth: true
                             ColumnLayout {
                                 spacing: 1
-                                Text { text: "BATTERY VOLTAGE"; font.pixelSize: 10; color: colTextDim }
+                                Text {
+                                    text: Math.abs(voltageOffset) > 0.001 ?
+                                          ("BATTERY (" + (voltageOffset > 0 ? "+" : "") + voltageOffset.toFixed(2) + "V)") :
+                                          "BATTERY VOLTAGE"
+                                    font.pixelSize: 10; color: colTextDim
+                                }
                                 Row {
                                     spacing: 3
                                     Text {
@@ -1330,7 +1343,12 @@ Item {
                             Layout.fillWidth: true
                             ColumnLayout {
                                 spacing: 1
-                                Text { text: "BATTERY VOLTAGE & CUTOFF"; font.pixelSize: 10; font.bold: true; color: colTextDim }
+                                Text {
+                                    text: Math.abs(voltageOffset) > 0.001 ?
+                                          ("BATTERY VOLTAGE (" + (voltageOffset > 0 ? "+" : "") + voltageOffset.toFixed(2) + "V)") :
+                                          "BATTERY VOLTAGE & CUTOFF"
+                                    font.pixelSize: 10; font.bold: true; color: colTextDim
+                                }
                                 Row {
                                     spacing: 4
                                     Text {
@@ -1845,6 +1863,30 @@ Item {
 
                                 RowLayout {
                                     Layout.fillWidth: true
+                                    Text { text: "Voltage Offset / Смещение (V):"; color: colTextWhite; font.pixelSize: 12; Layout.fillWidth: true }
+                                    DoubleSpinBox {
+                                        id: spinVoltageOffset
+                                        realValue: voltageOffset
+                                        realFrom: -10.0
+                                        realTo: 10.0
+                                        realStepSize: 0.05
+                                        decimals: 2
+                                        suffix: " V"
+                                        Layout.preferredWidth: 140
+                                        onRealValueChanged: {
+                                            voltageOffset = realValue;
+                                            hudSettings.voltageOffset = realValue;
+                                        }
+                                    }
+                                }
+
+                                Text {
+                                    text: "Corrects hardware ADC measurement error (e.g. +0.30 V or -0.20 V)."
+                                    font.pixelSize: 10; color: colTextDim
+                                }
+
+                                RowLayout {
+                                    Layout.fillWidth: true
                                     Text { text: "Series Cells (S):"; color: colTextWhite; font.pixelSize: 12; Layout.fillWidth: true }
                                     SpinBox {
                                         id: spinCells
@@ -1945,14 +1987,20 @@ Item {
         enabled: updateData
 
         function onValuesSetupReceived(values, mask) {
-            voltageIn = values.v_in;
+            voltageIn = values.v_in > 0.5 ? Math.max(0.0, values.v_in + voltageOffset) : 0.0;
             tempMos = values.temp_mos;
             tempMotor = values.temp_motor;
             currentMotor = values.current_motor;
             currentIn = values.current_in;
             dutyNow = values.duty_now;
             erpmNow = values.rpm;
-            batteryPercent = values.battery_level * 100.0;
+            var fullV = detectedCells * 4.2;
+            var minV = cutoffEndVal - 1.0;
+            if (Math.abs(voltageOffset) > 0.001) {
+                batteryPercent = Math.max(0, Math.min(100, ((voltageIn - minV) / Math.max(0.1, fullV - minV)) * 100.0));
+            } else {
+                batteryPercent = values.battery_level * 100.0;
+            }
             batteryWh = values.battery_wh;
             wattHours = values.watt_hours;
             wattHoursCharged = values.watt_hours_charged;
@@ -1988,7 +2036,7 @@ Item {
             if (speedNow > speedMax) speedMax = speedNow;
 
             // Electrical Motor Power (V * I)
-            powerNow = values.current_in * values.v_in;
+            powerNow = values.current_in * voltageIn;
             if (powerNow > powerMax) powerMax = powerNow;
             if (powerNow < powerMinRegen) powerMinRegen = powerNow;
 
@@ -2030,7 +2078,7 @@ Item {
         }
 
         function onValuesReceived(values, mask) {
-            voltageIn = values.v_in;
+            voltageIn = values.v_in > 0.5 ? Math.max(0.0, values.v_in + voltageOffset) : 0.0;
             tempMos = values.temp_mos;
             tempMotor = values.temp_motor;
             currentMotor = values.current_motor;
@@ -2043,7 +2091,7 @@ Item {
             ampHoursCharged = values.amp_hours_charged;
             faultString = values.fault_str;
 
-            powerNow = values.current_in * values.v_in;
+            powerNow = values.current_in * voltageIn;
             if (powerNow > powerMax) powerMax = powerNow;
             if (powerNow < powerMinRegen) powerMinRegen = powerNow;
 
