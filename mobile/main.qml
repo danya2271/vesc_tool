@@ -1208,7 +1208,9 @@ ApplicationWindow {
                 connected = true
             }
 
-            if (VescIf.useWakeLock()) {
+            // Reconnect owns its wake lock while retrying in the background.
+            // Do not release it from the connection-state notification.
+            if (VescIf.useWakeLock() && !VescIf.reconnectActive()) {
                 VescIf.setWakeLock(VescIf.isPortConnected())
             }
             if (!VescIf.reconnectActive()) {
