@@ -97,6 +97,15 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     mSendCanBefore = false;
     mCanIdBefore = 0;
     mWasConnected = false;
+    mReconnectTimer = new QTimer(this);
+    mReconnectTimer->setInterval(5000);
+    mReconnectTimer->setSingleShot(false);
+    mReconnectActive = false;
+    mReconnectSuppressed = false;
+    mReconnectForegroundActive = false;
+    mReconnectWakeLock = false;
+    mReconnectAttempts = 0;
+    connect(mReconnectTimer, SIGNAL(timeout()), this, SLOT(reconnectTimerSlot()));
     mAutoconnectOngoing = false;
     mAutoconnectProgress = 0.0;
     mIgnoreCanChange = false;
@@ -601,6 +610,7 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
 
 VescInterface::~VescInterface()
 {
+    stopReconnect(true);
     storeSettings();
     closeRtLogFile();
 
@@ -2250,6 +2260,15 @@ bool VescInterface::isBleConnected()
 
 void VescInterface::disconnectPort()
 {
+    disconnectPortInternal(true);
+}
+
+void VescInterface::disconnectPortInternal(bool stopReconnectRequest)
+{
+    if (stopReconnectRequest) {
+        stopReconnect(true);
+    }
+
 #ifdef HAS_SERIALPORT
     if(mSerialPort->isOpen()) {
         mSerialPort->flush();
@@ -2286,6 +2305,72 @@ void VescInterface::disconnectPort()
 #endif
 
     mFwRetries = 0;
+}
+
+void VescInterface::startReconnect()
+{
+    if (mReconnectSuppressed || mReconnectActive || mLastConnType == CONN_NONE) {
+        return;
+    }
+
+    mReconnectActive = true;
+    mReconnectAttempts = 0;
+    mReconnectTimer->start();
+    emit reconnectStateChanged(true, mReconnectAttempts);
+
+    // Keep the Qt event loop alive while Android suspends the activity. The
+    // existing foreground service is deliberately reused so no extra Android
+    // component is needed for reconnecting.
+    Utility::startGnssForegroundService();
+    if (!mWakeLockActive) {
+        mReconnectWakeLock = setWakeLock(true);
+    }
+}
+
+void VescInterface::stopReconnect(bool suppress)
+{
+    if (suppress) {
+        mReconnectSuppressed = true;
+    }
+
+    if (!mReconnectActive && !mReconnectTimer->isActive()) {
+        return;
+    }
+
+    mReconnectTimer->stop();
+    mReconnectActive = false;
+    emit reconnectStateChanged(false, mReconnectAttempts);
+    Utility::stopGnssForegroundService();
+    if (mReconnectWakeLock) {
+        setWakeLock(false);
+        mReconnectWakeLock = false;
+    }
+}
+
+void VescInterface::cancelReconnect()
+{
+    stopReconnect(true);
+}
+
+bool VescInterface::reconnectActive() const
+{
+    return mReconnectActive;
+}
+
+void VescInterface::reconnectTimerSlot()
+{
+    if (!mReconnectActive || mReconnectSuppressed) {
+        return;
+    }
+
+    if (isPortConnected()) {
+        stopReconnect(false);
+        return;
+    }
+
+    ++mReconnectAttempts;
+    emit reconnectStateChanged(true, mReconnectAttempts);
+    reconnectLastPort();
 }
 
 bool VescInterface::reconnectLastPort()
@@ -3316,6 +3401,9 @@ void VescInterface::timerSlot()
         mWasConnected = isPortConnected();
 
         if (!isPortConnected()) {
+            if (!mReconnectSuppressed) {
+                startReconnect();
+            }
             if (!getSupportedFirmwarePairs().contains(Utility::configLatestSupported())) {
                 Utility::configLoadLatest(this);
             }
@@ -3323,6 +3411,9 @@ void VescInterface::timerSlot()
             mDeserialFailedMessageShown = false;
             mPacket->resetState();
             mFwSwapDone = false;
+        } else {
+            mReconnectSuppressed = false;
+            stopReconnect(false);
         }
 
         emit portConnectedChanged();
@@ -4932,5 +5023,6 @@ void VescInterface::updateFwRx(bool fwRx)
 void VescInterface::setLastConnectionType(conn_t type)
 {
     mLastConnType = type;
+    mReconnectSuppressed = false;
     mSettings.setValue("connection_type", type);
 }

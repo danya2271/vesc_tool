@@ -10,7 +10,7 @@ VT_INTRO_VERSION = 1
 VT_CONFIG_VERSION = 4
 
 # Set to 0 for stable versions and to test version number for development versions.
-VT_IS_TEST_VERSION = 1
+VT_IS_TEST_VERSION = 0
 
 # GIT commit
 VT_GIT_COMMIT = $$system(git rev-parse --short=8 HEAD)

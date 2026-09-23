@@ -391,7 +391,8 @@ ApplicationWindow {
                 bottomPadding: 0
                 enabled: true
                 clip: true
-                currentIndex: 1
+                // Start on the custom Black-Green-Red HUD by default.
+                currentIndex: 4
                 anchors.fill:parent
                 orientation: Qt.Vertical
                 onCurrentIndexChanged: {
@@ -1007,23 +1008,40 @@ ApplicationWindow {
         }
     }
 
-    Timer {
-        id: bleDisconnectTimer
-        interval: 1000
-        running: false
-        repeat: true
-        property int trysLeft: 0
+    Dialog {
+        id: reconnectDialog
+        standardButtons: Dialog.Cancel
+        modal: true
+        focus: true
+        closePolicy: Popup.NoAutoClose
+        title: "Reconnecting"
+        width: parent.width - 20 - notchLeft - notchRight
+        height: Math.min(implicitHeight, parent.height - 40 - notchBot - notchTop)
+        x: (parent.width - width) / 2
+        y: (parent.height - height + notchTop) / 2
+        parent: mainSwipeView
 
-        onTriggered: {
-            if(trysLeft < 1 || fwReadCorrectly) {
-                bleDisconnectTimer.stop()
-                connScreen.opened = VescIf.isPortConnected() ? false : true
-                return
+        Overlay.modal: Rectangle {
+            color: "#AA000000"
+        }
+
+        ColumnLayout {
+            anchors.fill: parent
+            spacing: 10
+
+            Text {
+                id: reconnectText
+                Layout.fillWidth: true
+                Layout.fillHeight: true
+                color: Utility.getAppHexColor("lightText")
+                wrapMode: Text.WordWrap
+                text: "Controller disconnected. Retrying every 5 seconds...\nAttempt: 0"
             }
-            if(VescIf.getLastBleAddr().length > 0) {
-                VescIf.connectBle(VescIf.getLastBleAddr())
-            }
-            trysLeft = trysLeft - 1
+        }
+
+        onRejected: {
+            VescIf.cancelReconnect()
+            connScreen.opened = true
         }
     }
 
@@ -1193,14 +1211,20 @@ ApplicationWindow {
             if (VescIf.useWakeLock()) {
                 VescIf.setWakeLock(VescIf.isPortConnected())
             }
-            if(!bleDisconnectTimer.running) {
+            if (!VescIf.reconnectActive()) {
                 connScreen.opened = VescIf.isPortConnected() ? false : true
             }
         }
 
-        function onUnintentionalBleDisconnect() {
-            bleDisconnectTimer.trysLeft = 5
-            bleDisconnectTimer.start()
+        function onReconnectStateChanged(active, attempt) {
+            if (active) {
+                reconnectText.text = "Controller disconnected. Retrying every 5 seconds...\nAttempt: " + attempt
+                if (!reconnectDialog.opened) {
+                    reconnectDialog.open()
+                }
+            } else {
+                reconnectDialog.close()
+            }
         }
 
         function onStatusMessage(msg, isGood) {
@@ -1251,7 +1275,9 @@ ApplicationWindow {
                 }
 
                 fwReadCorrectly = true
-                bleDisconnectTimer.stop()
+                if (VescIf.reconnectActive()) {
+                    VescIf.cancelReconnect()
+                }
             } else {
                 updateConfCustom()
             }

@@ -94,7 +94,14 @@ Item {
     property real whKmAvg: 0.0
     property real totalOdometerKm: 0.0
     property real tripDistanceKm: 0.0
-    property real tripDistanceOffset: 0.0
+    // Trip baselines live only for this application session. A controller
+    // disconnect therefore cannot reset the trip, while a full restart does.
+    property bool tripInitialized: false
+    property real tripBaseOdometerKm: 0.0
+    property real tripBaseTachometerKm: 0.0
+    property real tripBaseWh: 0.0
+    property real tripBaseWhCharged: 0.0
+    property real tachometerAbsKm: 0.0
     property string uptimeString: "00:00:00"
     property string faultString: "FAULT_CODE_NONE"
     property int numControllers: 1
@@ -144,7 +151,6 @@ Item {
         property real erpmRedPowerThreshold: 600.0
         property real erpmLowRange: 3000.0
         property bool isMinimalView: false
-        property real tripDistanceOffset: 0.0
         property real speedSmoothing: 0.0
         property int pollInterval: 50
         property real voltageOffset: 0.0
@@ -162,7 +168,6 @@ Item {
         erpmRedPowerThreshold = hudSettings.erpmRedPowerThreshold > 0 ? hudSettings.erpmRedPowerThreshold : 600.0;
         erpmLowRange = hudSettings.erpmLowRange > 0 ? hudSettings.erpmLowRange : 3000.0;
         isMinimalView = hudSettings.isMinimalView;
-        tripDistanceOffset = hudSettings.tripDistanceOffset;
         speedSmoothing = (hudSettings.speedSmoothing !== undefined && hudSettings.speedSmoothing >= 0) ? hudSettings.speedSmoothing : 0.0;
         pollInterval = (hudSettings.pollInterval && hudSettings.pollInterval >= 20) ? hudSettings.pollInterval : 50;
         voltageOffset = (hudSettings.voltageOffset !== undefined) ? hudSettings.voltageOffset : 0.0;
@@ -647,9 +652,12 @@ Item {
                             Layout.fillWidth: true
                             text: "Reset Trip"
                             onClicked: {
-                                tripDistanceOffset = totalOdometerKm;
                                 tripDistanceKm = 0.0;
-                                hudSettings.tripDistanceOffset = tripDistanceOffset;
+                                tripInitialized = true;
+                                tripBaseOdometerKm = totalOdometerKm / distUnitFact;
+                                tripBaseTachometerKm = tachometerAbsKm / distUnitFact;
+                                tripBaseWh = wattHours;
+                                tripBaseWhCharged = wattHoursCharged;
                             }
                         }
                     }
@@ -859,6 +867,18 @@ Item {
                                 Text { text: "TRIP DIST"; font.pixelSize: 9; color: colTextDim }
                                 Text { text: tripDistanceKm.toFixed(1) + " " + distUnitText; font.bold: true; font.pixelSize: 16; color: colTextWhite }
                                 Text { text: "Odo: " + totalOdometerKm.toFixed(1); font.pixelSize: 9; color: colTextDim }
+                            }
+
+                            Rectangle { width: 1; Layout.fillHeight: true; color: "#162b1b" }
+
+                            ColumnLayout {
+                                Layout.fillWidth: true; spacing: 2
+                                Text { text: "EFFICIENCY AVG"; font.pixelSize: 9; color: colTextDim }
+                                Text {
+                                    text: whKmAvg > 0 ? (whKmAvg * (useImperial ? 1.60934 : 1.0)).toFixed(1) + " " + whDistUnitText : "-- " + whDistUnitText
+                                    font.bold: true; font.pixelSize: 14; color: colLightGreen
+                                }
+                                Text { text: "Trip average"; font.pixelSize: 9; color: colTextDim }
                             }
                         }
                     }
@@ -1960,9 +1980,12 @@ Item {
                                     Layout.fillWidth: true
                                     text: "Reset Trip"
                                     onClicked: {
-                                        tripDistanceOffset = totalOdometerKm;
                                         tripDistanceKm = 0.0;
-                                        hudSettings.tripDistanceOffset = tripDistanceOffset;
+                                        tripInitialized = true;
+                                        tripBaseOdometerKm = totalOdometerKm / distUnitFact;
+                                        tripBaseTachometerKm = tachometerAbsKm / distUnitFact;
+                                        tripBaseWh = wattHours;
+                                        tripBaseWhCharged = wattHoursCharged;
                                     }
                                 }
                             }
@@ -2043,12 +2066,26 @@ Item {
             // Odometer & Trip Distance
             totalOdometerKm = (values.odometer / 1000.0) * distUnitFact;
             var tDist = (values.tachometer_abs / 1000.0) * distUnitFact;
-            tripDistanceKm = tripDistanceOffset > 0 ? Math.max(0, totalOdometerKm - tripDistanceOffset) : tDist;
+            tachometerAbsKm = tDist;
+            var validDistance = values.odometer > 0 || values.tachometer_abs > 0;
+            if (!tripInitialized && validDistance) {
+                tripInitialized = true;
+                tripBaseOdometerKm = values.odometer / 1000.0;
+                tripBaseTachometerKm = values.tachometer_abs / 1000.0;
+                tripBaseWh = values.watt_hours;
+                tripBaseWhCharged = values.watt_hours_charged;
+            }
+            if (tripInitialized && validDistance) {
+                var odoTrip = Math.max(0, values.odometer / 1000.0 - tripBaseOdometerKm);
+                var tachoTrip = Math.max(0, values.tachometer_abs / 1000.0 - tripBaseTachometerKm);
+                tripDistanceKm = Math.max(odoTrip, tachoTrip) * distUnitFact;
+            }
 
             // Consumption calculation
-            var whConsume = values.watt_hours - values.watt_hours_charged;
-            var distAbsKm = values.tachometer_abs / 1000.0;
-            if (distAbsKm > 0.01) {
+            var whConsume = tripInitialized ?
+                        (values.watt_hours - tripBaseWh) - (values.watt_hours_charged - tripBaseWhCharged) : 0.0;
+            var distAbsKm = tripDistanceKm / Math.max(0.000001, distUnitFact);
+            if (validDistance && distAbsKm > 0.01) {
                 whKmAvg = whConsume / distAbsKm;
             }
             var speedKm = values.speed * 3.6;

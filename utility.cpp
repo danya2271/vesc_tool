@@ -265,7 +265,7 @@ QString Utility::aboutText()
 
 QString Utility::versionText()
 {
-    return QString::number(VT_VERSION, 'f', 2) + "-" + QString::number(VT_IS_TEST_VERSION) + "+" + STR(VT_GIT_COMMIT);
+    return QString::number(VT_VERSION, 'f', 2) + "+" + STR(VT_GIT_COMMIT);
 }
 
 QString Utility::uuid2Str(QByteArray uuid, bool space)

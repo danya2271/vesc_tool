@@ -183,6 +183,8 @@ public:
     Q_INVOKABLE bool isBleConnected();
     Q_INVOKABLE void disconnectPort();
     Q_INVOKABLE bool reconnectLastPort();
+    Q_INVOKABLE void cancelReconnect();
+    Q_INVOKABLE bool reconnectActive() const;
     Q_INVOKABLE bool lastPortAvailable();
     Q_INVOKABLE bool autoconnect();
     Q_INVOKABLE QString getConnectedPortName();
@@ -301,6 +303,7 @@ signals:
     void CANbusNewNode(int node);
     void CANbusInterfaceListUpdated();
     void useImperialUnitsChanged(bool useImperialUnits);
+    void reconnectStateChanged(bool active, int attempt);
     void configurationChanged();
     void configurationBackupsChanged();
     void customConfigLoadDone();
@@ -342,6 +345,7 @@ private slots:
     void mcconfUpdated();
     void ackReceived(QString ackType);
     void customConfigRx(int confId, QByteArray data);
+    void reconnectTimerSlot();
 
 private:
     typedef enum {
@@ -465,6 +469,12 @@ private:
     bool mSendCanBefore = false;
     int mCanIdBefore = 0;
     bool mWasConnected;
+    QTimer *mReconnectTimer;
+    bool mReconnectActive;
+    bool mReconnectSuppressed;
+    bool mReconnectForegroundActive;
+    bool mReconnectWakeLock;
+    int mReconnectAttempts;
     bool mAutoconnectOngoing;
     double mAutoconnectProgress;
     bool mIgnoreCanChange;
@@ -493,6 +503,9 @@ private:
 
     void updateFwRx(bool fwRx);
     void setLastConnectionType(conn_t type);
+    void startReconnect();
+    void stopReconnect(bool suppress);
+    void disconnectPortInternal(bool stopReconnect);
 
 };
 
