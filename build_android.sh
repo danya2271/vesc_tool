@@ -510,6 +510,13 @@ build_apk() {
     log_info "Building VESC Tool APK: ${BOLD}${variant}${NC} (${TARGET_ARCH})"
     log_info "=========================================="
 
+    # Older desktop qmake builds could leave QCodeEditor.o in the project
+    # root.  The Android project has a QCodeEditor/ source directory, so GNU
+    # make may mistake that stale object for an implicit target named
+    # "QCodeEditor" and try to link into the directory.  Android objects are
+    # generated under build/android/obj; remove only this known stale artifact.
+    rm -f "$SCRIPT_DIR/QCodeEditor.o"
+
     log_info "Running qmake..."
     qmake -config release "$config_flag" ANDROID_ABIS="$TARGET_ARCH" -spec android-clang
 
@@ -583,4 +590,3 @@ fi
 echo ""
 log_success "Android build completed successfully!"
 ls -lh build/android/*.apk 2>/dev/null || true
-
