@@ -46,8 +46,7 @@ public class Utils
 
     public static void stopVForegroundService(Context ctx) {
         Intent intent = new Intent(ctx, VForegroundService.class);
-        intent.setAction(VForegroundService.ACTION_STOP_FOREGROUND_SERVICE);
-        ctx.startService(intent);
+        ctx.stopService(intent);
     }
 
     public static boolean checkLocationEnabled(Context ctx) {
