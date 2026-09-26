@@ -110,6 +110,10 @@ void BleUart::disconnectBle()
     }
 
     if (mControl) {
+        // Stop the native GATT operation before releasing the Qt wrapper.
+        // Android can otherwise deliver delayed callbacks from the previous
+        // controller after the next reconnect attempt has already started.
+        mControl->disconnectFromDevice();
         mControl->deleteLater();
         mControl = nullptr;
     }
@@ -222,6 +226,10 @@ void BleUart::serviceDiscovered(const QBluetoothUuid &gatt)
 
 void BleUart::serviceScanDone()
 {
+    if (sender() != mControl) {
+        return;
+    }
+
     if (mService) {
         mService->deleteLater();
         mService = nullptr;
@@ -253,6 +261,10 @@ void BleUart::serviceScanDone()
 
 void BleUart::controllerError(QLowEnergyController::Error e)
 {
+    if (sender() != mControl) {
+        return;
+    }
+
     qWarning() << "BLE error:" << e;
     disconnectBle();
     mConnectTimeoutTimer.stop();
@@ -261,6 +273,10 @@ void BleUart::controllerError(QLowEnergyController::Error e)
 
 void BleUart::deviceConnected()
 {
+    if (sender() != mControl) {
+        return;
+    }
+
     if (!mControl) {
         qWarning() << "mControl invalid";
         return;
@@ -271,11 +287,19 @@ void BleUart::deviceConnected()
 
 void BleUart::deviceDisconnected()
 {
+    if (sender() != mControl) {
+        return;
+    }
+
     disconnectBle();
 }
 
 void BleUart::serviceStateChanged(QLowEnergyService::ServiceState s)
 {
+    if (sender() != mService) {
+        return;
+    }
+
     // A descriptor can only be written if the service is in the ServiceDiscovered state
     switch (s) {
     case QLowEnergyService::InvalidService: {
@@ -326,11 +350,19 @@ void BleUart::serviceStateChanged(QLowEnergyService::ServiceState s)
 }
 
 void BleUart::serviceError(QLowEnergyService::ServiceError e){
+    if (sender() != mService) {
+        return;
+    }
+
     qDebug() << "serviceError:" << e;
 }
 
 void BleUart::updateData(const QLowEnergyCharacteristic &c, const QByteArray &value)
 {
+    if (sender() != mService) {
+        return;
+    }
+
     if (c.uuid() == QBluetoothUuid(QUuid(mTxUuid))) {
         emit dataRx(value);
     }
@@ -338,6 +370,10 @@ void BleUart::updateData(const QLowEnergyCharacteristic &c, const QByteArray &va
 
 void BleUart::confirmedDescriptorWrite(const QLowEnergyDescriptor &d, const QByteArray &value)
 {
+    if (sender() != mService) {
+        return;
+    }
+
     if (d.isValid() && d == mNotificationDescTx && value == QByteArray("0000")) {
         //disabled notifications -> assume disconnect intent
         disconnectBle();

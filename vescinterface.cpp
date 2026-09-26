@@ -2402,6 +2402,15 @@ void VescInterface::reconnectTimerSlot()
         return;
     }
 
+#ifdef HAS_BLUETOOTH
+    // Do not tear down an in-flight Android GATT operation just because the
+    // periodic reconnect timer fired. The controller timeout owns completion
+    // of this attempt; the next timer tick will start a fresh one.
+    if (mLastConnType == CONN_BLE && mBleUart->isConnecting()) {
+        return;
+    }
+#endif
+
     ++mReconnectAttempts;
     emit reconnectStateChanged(true, mReconnectAttempts);
     reconnectLastPort();
