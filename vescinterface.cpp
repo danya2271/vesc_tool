@@ -2364,7 +2364,13 @@ void VescInterface::reconnectTimerSlot()
     }
 
     if (isPortConnected()) {
-        stopReconnect(false);
+        // A BLE connection is not usable until the controller has answered
+        // the firmware request.  Stopping here used to leave reconnect mode
+        // after the transport connected, so a subsequent GATT/firmware error
+        // sent the user back to the connection screen.
+        if (mFwVersionReceived) {
+            stopReconnect(false);
+        }
         return;
     }
 
@@ -3401,6 +3407,11 @@ void VescInterface::timerSlot()
         mWasConnected = isPortConnected();
 
         if (!isPortConnected()) {
+            // BLE can disappear without going through disconnectPortInternal,
+            // so clear the handshake state here as well.  Otherwise a later
+            // transport connection could be mistaken for a fully restored
+            // controller connection.
+            updateFwRx(false);
             if (!mReconnectSuppressed) {
                 startReconnect();
             }

@@ -667,8 +667,13 @@ Item {
         }
 
         function onBleError(info) {
-            VescIf.emitMessageDialog("BLE Error", info, false, false)
-            enableDialog()
+            // Connection errors are expected while the background reconnect
+            // loop is retrying.  Showing each transient error opens a modal
+            // dialog and can expose the manual connection screen.
+            if (!VescIf.reconnectActive()) {
+                VescIf.emitMessageDialog("BLE Error", info, false, false)
+                enableDialog()
+            }
         }
     }
 
