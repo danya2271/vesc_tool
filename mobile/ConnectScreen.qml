@@ -673,7 +673,8 @@ Item {
             // A stale Qt BLE error can also arrive just after the firmware
             // handshake completed, so ignore it while the controller is
             // already usable.
-            if (!VescIf.reconnectActive() && !VescIf.isPortConnected()) {
+            if (!VescIf.reconnectActive() && !VescIf.reconnectGraceActive() &&
+                    !VescIf.isPortConnected()) {
                 VescIf.emitMessageDialog("BLE Error", info, false, false)
                 enableDialog()
             }

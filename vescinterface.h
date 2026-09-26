@@ -187,6 +187,7 @@ public:
     Q_INVOKABLE void cancelReconnect();
     Q_INVOKABLE void finishReconnect();
     Q_INVOKABLE bool reconnectActive() const;
+    Q_INVOKABLE bool reconnectGraceActive() const;
     Q_INVOKABLE bool lastPortAvailable();
     Q_INVOKABLE bool autoconnect();
     Q_INVOKABLE QString getConnectedPortName();
@@ -479,6 +480,7 @@ private:
     int mReconnectAttempts;
     QElapsedTimer mReconnectHandshakeTimer;
     bool mSuppressConfigErrors;
+    bool mReconnectGraceActive;
     bool mAutoconnectOngoing;
     double mAutoconnectProgress;
     bool mIgnoreCanChange;
