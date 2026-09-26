@@ -3326,6 +3326,14 @@ void VescInterface::timerSlot()
 #endif
     tcpInputDataAvailable();
 
+    // Give Android/Qt BLE time to finish settling the GATT connection before
+    // sending the first command.  The transport may report connected a little
+    // before notifications and characteristics are actually ready.
+    if (mReconnectActive && mLastConnType == CONN_BLE &&
+            !mWasConnected && isPortConnected()) {
+        mReconnectHandshakeTimer.start();
+    }
+
 #ifdef HAS_CANBUS
     if (mCanDeviceInterfaces != listCANbusInterfaces()) {
         mCanDeviceInterfaces = listCANbusInterfaces();
@@ -3343,7 +3351,11 @@ void VescInterface::timerSlot()
             }
 
             mFwPollCnt++;
-            if (mFwPollCnt >= 4) {
+            const bool reconnectHandshakeDelay =
+                    mReconnectActive && mLastConnType == CONN_BLE &&
+                    mReconnectHandshakeTimer.isValid() &&
+                    mReconnectHandshakeTimer.elapsed() < 2500;
+            if (!reconnectHandshakeDelay && mFwPollCnt >= 4) {
                 mFwPollCnt = 0;
                 if (!mFwVersionReceived) {
                     mCommands->getFwVersion();
@@ -3352,14 +3364,21 @@ void VescInterface::timerSlot()
                     // Timeout if the firmware cannot be read
                     if (mFwRetries >= 25) {
                         emit statusMessage(tr("No firmware read response"), false);
-                        emit messageDialog(tr("Read Firmware Version"),
-                                           tr("Could not read firmware version. Make sure that "
-                                              "the selected port really belongs to the VESC. If "
-                                              "you are using UART, make sure that the port is enabled, "
-                                              "connected correctly (rx to tx and tx to rx) and uses "
-                                              "the correct baudrate"),
-                                           false, false);
-                        disconnectPort();
+                        if (mReconnectActive) {
+                            // A transport-level reconnect can succeed before
+                            // GATT is ready. Retry the whole BLE session while
+                            // keeping the reconnect UI and ride state alive.
+                            disconnectPortInternal(false);
+                        } else {
+                            emit messageDialog(tr("Read Firmware Version"),
+                                               tr("Could not read firmware version. Make sure that "
+                                                  "the selected port really belongs to the VESC. If "
+                                                  "you are using UART, make sure that the port is enabled, "
+                                                  "connected correctly (rx to tx and tx to rx) and uses "
+                                                  "the correct baudrate"),
+                                               false, false);
+                            disconnectPort();
+                        }
                     }
                 }
             }
@@ -3424,7 +3443,6 @@ void VescInterface::timerSlot()
             mFwSwapDone = false;
         } else {
             mReconnectSuppressed = false;
-            stopReconnect(false);
         }
 
         emit portConnectedChanged();

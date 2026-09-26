@@ -31,6 +31,7 @@
 #include <QSettings>
 #include <QHash>
 #include <QFile>
+#include <QElapsedTimer>
 
 #ifdef HAS_SERIALPORT
 #include <QSerialPort>
@@ -475,6 +476,7 @@ private:
     bool mReconnectForegroundActive;
     bool mReconnectWakeLock;
     int mReconnectAttempts;
+    QElapsedTimer mReconnectHandshakeTimer;
     bool mAutoconnectOngoing;
     double mAutoconnectProgress;
     bool mIgnoreCanChange;
