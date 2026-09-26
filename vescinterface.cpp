@@ -105,6 +105,7 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     mReconnectForegroundActive = false;
     mReconnectWakeLock = false;
     mReconnectAttempts = 0;
+    mSuppressConfigErrors = false;
     connect(mReconnectTimer, SIGNAL(timeout()), this, SLOT(reconnectTimerSlot()));
     mAutoconnectOngoing = false;
     mAutoconnectProgress = 0.0;
@@ -556,6 +557,13 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
 
     mDeserialFailedMessageShown = false;
     connect(mCommands, &Commands::deserializeConfigFailed, [this](bool isMc, bool isApp) {
+        if (mSuppressConfigErrors) {
+            // The first configuration response after a BLE reconnect can be
+            // truncated while notifications settle. Let the periodic config
+            // timer retry it instead of showing a false firmware error.
+            return;
+        }
+
         if (!mDeserialFailedMessageShown) {
             mDeserialFailedMessageShown = true;
             QString configName = "unknown";
@@ -2350,6 +2358,18 @@ void VescInterface::stopReconnect(bool suppress)
 void VescInterface::cancelReconnect()
 {
     stopReconnect(true);
+}
+
+void VescInterface::finishReconnect()
+{
+    // A successful reconnect must not suppress future reconnects.  The
+    // explicit cancel action uses cancelReconnect(), while the firmware
+    // handshake uses this non-suppressing completion path.
+    stopReconnect(false);
+    mSuppressConfigErrors = true;
+    QTimer::singleShot(8000, this, [this]() {
+        mSuppressConfigErrors = false;
+    });
 }
 
 bool VescInterface::reconnectActive() const

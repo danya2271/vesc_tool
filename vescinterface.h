@@ -185,6 +185,7 @@ public:
     Q_INVOKABLE void disconnectPort();
     Q_INVOKABLE bool reconnectLastPort();
     Q_INVOKABLE void cancelReconnect();
+    Q_INVOKABLE void finishReconnect();
     Q_INVOKABLE bool reconnectActive() const;
     Q_INVOKABLE bool lastPortAvailable();
     Q_INVOKABLE bool autoconnect();
@@ -477,6 +478,7 @@ private:
     bool mReconnectWakeLock;
     int mReconnectAttempts;
     QElapsedTimer mReconnectHandshakeTimer;
+    bool mSuppressConfigErrors;
     bool mAutoconnectOngoing;
     double mAutoconnectProgress;
     bool mIgnoreCanChange;

@@ -936,8 +936,14 @@ ApplicationWindow {
 
         property bool mcConfRx: false
         property bool appConfRx: false
+        property int delayCycles: 0
 
         onTriggered: {
+            if (delayCycles > 0) {
+                delayCycles--
+                return
+            }
+
             if (VescIf.isPortConnected() && VescIf.getLastFwRxParams().hwTypeStr() === "VESC") {
                 if (!mcConfRx) {
                     mCommands.getMcconf()
@@ -1250,6 +1256,8 @@ ApplicationWindow {
 
         function onFwRxChanged(rx, limited) {
             if (rx) {
+                var wasReconnecting = VescIf.reconnectActive()
+
                 if (VescIf.getFwSupportsConfiguration()) {
                     confPageMotor.visible = true
                     confPageApp.visible = true
@@ -1271,14 +1279,15 @@ ApplicationWindow {
                     confTimer.restart()
                     confTimer.mcConfRx = false
                     confTimer.appConfRx = false
-
-                    mCommands.getMcconf()
-                    mCommands.getAppConf()
+                    // Let the BLE link settle before requesting the large
+                    // configuration packets. This avoids parsing the first
+                    // response while GATT notifications are still coming up.
+                    confTimer.delayCycles = wasReconnecting ? 2 : 0
                 }
 
                 fwReadCorrectly = true
-                if (VescIf.reconnectActive()) {
-                    VescIf.cancelReconnect()
+                if (wasReconnecting) {
+                    VescIf.finishReconnect()
                 }
             } else {
                 updateConfCustom()
