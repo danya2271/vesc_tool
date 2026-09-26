@@ -1067,6 +1067,8 @@ ApplicationWindow {
         y: (parent.height - height + notchTop) / 2
         parent: mainSwipeView
 
+        onClosed: errorDialogAutoCloseTimer.stop()
+
         ScrollView {
             id: vescDialogScroll
             anchors.fill: parent
@@ -1084,6 +1086,17 @@ ApplicationWindow {
                 onLinkActivated: {
                     Qt.openUrlExternally(link)
                 }
+            }
+        }
+    }
+
+    Timer {
+        id: errorDialogAutoCloseTimer
+        interval: 4000
+        repeat: false
+        onTriggered: {
+            if (vescDialog.opened) {
+                vescDialog.close()
             }
         }
     }
@@ -1252,6 +1265,11 @@ ApplicationWindow {
             vescDialogLabel.text = (richText ? "<style>a:link { color: lightblue; }</style>" : "") + msg
             vescDialogScroll.ScrollBar.vertical.position = 0
             vescDialog.open()
+            if (isGood) {
+                errorDialogAutoCloseTimer.stop()
+            } else {
+                errorDialogAutoCloseTimer.restart()
+            }
         }
 
         function onFwRxChanged(rx, limited) {
