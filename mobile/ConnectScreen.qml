@@ -670,7 +670,10 @@ Item {
             // Connection errors are expected while the background reconnect
             // loop is retrying.  Showing each transient error opens a modal
             // dialog and can expose the manual connection screen.
-            if (!VescIf.reconnectActive()) {
+            // A stale Qt BLE error can also arrive just after the firmware
+            // handshake completed, so ignore it while the controller is
+            // already usable.
+            if (!VescIf.reconnectActive() && !VescIf.isPortConnected()) {
                 VescIf.emitMessageDialog("BLE Error", info, false, false)
                 enableDialog()
             }

@@ -2367,7 +2367,7 @@ void VescInterface::finishReconnect()
     // handshake uses this non-suppressing completion path.
     stopReconnect(false);
     mSuppressConfigErrors = true;
-    QTimer::singleShot(8000, this, [this]() {
+    QTimer::singleShot(30000, this, [this]() {
         mSuppressConfigErrors = false;
     });
 }
