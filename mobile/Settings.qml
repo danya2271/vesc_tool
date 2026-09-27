@@ -80,13 +80,21 @@ Item {
                     enabled: Qt.platform.os !== "ios"
                 }
 
-                CheckBox {
+                RowLayout {
                     id: screenRotBox
                     Layout.fillWidth: true
-                    text: "Allow Screen Rotation"
-                    checked: VescIf.getAllowScreenRotation()
                     visible: Qt.platform.os !== "ios"
                     enabled: Qt.platform.os !== "ios"
+
+                    Label {
+                        Layout.fillWidth: true
+                        text: "Default Screen Rotation"
+                    }
+
+                    ComboBox {
+                        id: screenRotCombo
+                        model: ["0°", "90°", "180°", "270°"]
+                    }
                 }
 
                 CheckBox {
@@ -140,7 +148,7 @@ Item {
             imperialBox.checked = VescIf.useImperialUnits()
             negativeSpeedBox.checked = VescIf.speedGaugeUseNegativeValues()
             screenOnBox.checked = VescIf.keepScreenOn()
-            screenRotBox.checked = VescIf.getAllowScreenRotation()
+            screenRotCombo.currentIndex = Math.max(0, Math.min(3, VescIf.getScreenRotation() / 90))
             qmlUiBox.checked = VescIf.getLoadQmlUiOnConnect()
             qmlUiAskBox.checked = VescIf.askQmlLoad()
             reconnectLastCanBox.checked = VescIf.reconnectLastCan()
@@ -152,7 +160,7 @@ Item {
             VescIf.setUseImperialUnits(imperialBox.checked)
             VescIf.setSpeedGaugeUseNegativeValues(negativeSpeedBox.checked)
             VescIf.setKeepScreenOn(screenOnBox.checked)
-            VescIf.setAllowScreenRotation(screenRotBox.checked)
+            VescIf.setScreenRotation(screenRotCombo.currentIndex * 90)
             VescIf.setLoadQmlUiOnConnect(qmlUiBox.checked)
             VescIf.setAskQmlLoad(qmlUiAskBox.checked)
             VescIf.setReconnectLastCan(reconnectLastCanBox.checked)

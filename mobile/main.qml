@@ -110,7 +110,7 @@ ApplicationWindow {
         }
         updateNotch()
         Utility.keepScreenOn(VescIf.keepScreenOn())
-        Utility.allowScreenRotation(VescIf.getAllowScreenRotation())
+        Utility.setScreenRotation(VescIf.getScreenRotation())
         Utility.stopGnssForegroundService()
     }
 
@@ -1174,6 +1174,16 @@ ApplicationWindow {
         }
     }
 
+    function openDefaultHud() {
+        if (!VescIf.isPortConnected()) {
+            return
+        }
+
+        rtSwipeView.currentIndex = 4
+        mainSwipeView.currentIndex = 1 + indexOffset()
+        setFullscreenHud(true)
+    }
+
     Timer {
         id: confCustomTimer
         running: false
@@ -1219,12 +1229,14 @@ ApplicationWindow {
         function onPortConnectedChanged() {
             connectedText.text = VescIf.getConnectedPortName()
             if (!VescIf.isPortConnected()) {
+                setFullscreenHud(false)
                 confTimer.mcConfRx = false
                 confTimer.appConfRx = false
                 connected = false
                 fwReadCorrectly = false
             } else {
                 connected = true
+                openDefaultHud()
             }
 
             // Reconnect owns its wake lock while retrying in the background.
@@ -1312,6 +1324,9 @@ ApplicationWindow {
             }
 
             updateHwAppUi()
+            if (rx) {
+                openDefaultHud()
+            }
         }
 
         function onQmlLoadDone() {
@@ -1319,6 +1334,7 @@ ApplicationWindow {
                 qmlLoadDialog.open()
             } else {
                 updateHwAppUi()
+                openDefaultHud()
             }
         }
 
@@ -1408,6 +1424,7 @@ ApplicationWindow {
         onAccepted: {
             VescIf.setAskQmlLoad(!qmlDoNotAskAgainBox.checked)
             updateHwAppUi()
+            openDefaultHud()
         }
 
         onRejected: {

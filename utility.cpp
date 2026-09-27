@@ -394,6 +394,39 @@ void Utility::allowScreenRotation(bool enabled)
 #endif
 }
 
+void Utility::setScreenRotation(int rotation)
+{
+#ifdef Q_OS_ANDROID
+    const char *orientation = nullptr;
+
+    switch (rotation) {
+    case 0:
+        orientation = "SCREEN_ORIENTATION_PORTRAIT";
+        break;
+    case 90:
+        orientation = "SCREEN_ORIENTATION_LANDSCAPE";
+        break;
+    case 180:
+        orientation = "SCREEN_ORIENTATION_REVERSE_PORTRAIT";
+        break;
+    case 270:
+        orientation = "SCREEN_ORIENTATION_REVERSE_LANDSCAPE";
+        break;
+    default:
+        return;
+    }
+
+    QAndroidJniObject activity = QtAndroid::androidActivity();
+    if (activity.isValid()) {
+        activity.callMethod<void>("setRequestedOrientation", "(I)V",
+                                  QAndroidJniObject::getStaticField<int>(
+                                      "android.content.pm.ActivityInfo", orientation));
+    }
+#else
+    (void)rotation;
+#endif
+}
+
 bool Utility::waitSignal(QObject *sender, QString signal, int timeoutMs)
 {
     // qDebug() << "LoopLevel" << QThread::currentThread()->loopLevel();

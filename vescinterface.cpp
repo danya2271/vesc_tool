@@ -353,6 +353,11 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     mUseWakeLock = mSettings.value("useWakeLock", false).toBool();
     mLoadQmlUiOnConnect = mSettings.value("loadQmlUiOnConnect", true).toBool();
     mAllowScreenRotation = mSettings.value("allowScreenRotation", false).toBool();
+    mScreenRotation = mSettings.value("screenRotation", 0).toInt();
+    if (mScreenRotation != 0 && mScreenRotation != 90 &&
+            mScreenRotation != 180 && mScreenRotation != 270) {
+        mScreenRotation = 0;
+    }
     mSpeedGaugeUseNegativeValues =  mSettings.value("speedGaugeUseNegativeValues", true).toBool();
     mAskQmlLoad =  mSettings.value("askQmlLoad", true).toBool();
 
@@ -817,6 +822,7 @@ void VescInterface::storeSettings()
     mSettings.setValue("loadQmlUiOnConnect", mLoadQmlUiOnConnect);
     mSettings.setValue("darkMode", Utility::isDarkMode());
     mSettings.setValue("allowScreenRotation", mAllowScreenRotation);
+    mSettings.setValue("screenRotation", mScreenRotation);
     mSettings.setValue("speedGaugeUseNegativeValues", mSpeedGaugeUseNegativeValues);
     mSettings.setValue("askQmlLoad", mAskQmlLoad);
     mSettings.sync();
@@ -2139,6 +2145,22 @@ void VescInterface::setAllowScreenRotation(bool allowScreenRotation)
 {
     mAllowScreenRotation = allowScreenRotation;
     Utility::allowScreenRotation(allowScreenRotation);
+}
+
+int VescInterface::getScreenRotation() const
+{
+    return mScreenRotation;
+}
+
+void VescInterface::setScreenRotation(int screenRotation)
+{
+    if (screenRotation != 0 && screenRotation != 90 &&
+            screenRotation != 180 && screenRotation != 270) {
+        return;
+    }
+
+    mScreenRotation = screenRotation;
+    Utility::setScreenRotation(screenRotation);
 }
 
 bool VescInterface::speedGaugeUseNegativeValues()

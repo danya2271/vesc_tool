@@ -70,6 +70,7 @@ public:
     Q_INVOKABLE static bool requestBleScanPermission();
     Q_INVOKABLE static bool requestBleConnectPermission();
     Q_INVOKABLE static void keepScreenOn(bool on);
+    Q_INVOKABLE static void setScreenRotation(int rotation);
     Q_INVOKABLE static void allowScreenRotation(bool enabled);
     Q_INVOKABLE static bool waitSignal(QObject *sender, QString signal, int timeoutMs);
     Q_INVOKABLE static void sleepWithEventLoop(int timeMs);

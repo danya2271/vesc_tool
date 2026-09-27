@@ -161,6 +161,8 @@ public:
     Q_INVOKABLE void setLoadQmlUiOnConnect(bool loadQmlUiOnConnect);
     Q_INVOKABLE bool getAllowScreenRotation() const;
     Q_INVOKABLE void setAllowScreenRotation(bool allowScreenRotation);
+    Q_INVOKABLE int getScreenRotation() const;
+    Q_INVOKABLE void setScreenRotation(int screenRotation);
     Q_INVOKABLE bool speedGaugeUseNegativeValues();
     Q_INVOKABLE void setSpeedGaugeUseNegativeValues(bool useNegativeValues);
     Q_INVOKABLE bool askQmlLoad() const;
@@ -502,6 +504,7 @@ private:
     bool mUseWakeLock;
     bool mLoadQmlUiOnConnect;
     bool mAllowScreenRotation;
+    int mScreenRotation;
     bool mSpeedGaugeUseNegativeValues;
     bool mAskQmlLoad;
     bool mIgnoreCustomConfigs;
