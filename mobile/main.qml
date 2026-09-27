@@ -1224,6 +1224,15 @@ ApplicationWindow {
         return res
     }
 
+    function containerContains(container, item) {
+        for (var itemIndex = 0; itemIndex < container.count; itemIndex++) {
+            if (container.itemAt(itemIndex) === item) {
+                return true
+            }
+        }
+        return false
+    }
+
     Connections {
         target: VescIf
         function onPortConnectedChanged() {
@@ -1292,10 +1301,18 @@ ApplicationWindow {
                     confPageMotor.visible = true
                     confPageApp.visible = true
 
-                    mainSwipeView.insertItem(4, confPageApp)
-                    tabBar.insertItem(4, confAppButton)
-                    mainSwipeView.insertItem(4, confPageMotor)
-                    tabBar.insertItem(4, confMotorButton)
+                    if (!containerContains(mainSwipeView, confPageApp)) {
+                        mainSwipeView.insertItem(4, confPageApp)
+                    }
+                    if (!containerContains(tabBar, confAppButton)) {
+                        tabBar.insertItem(4, confAppButton)
+                    }
+                    if (!containerContains(mainSwipeView, confPageMotor)) {
+                        mainSwipeView.insertItem(4, confPageMotor)
+                    }
+                    if (!containerContains(tabBar, confMotorButton)) {
+                        tabBar.insertItem(4, confMotorButton)
+                    }
                 } else {
                     confPageMotor.visible = false
                     confPageApp.visible = false
