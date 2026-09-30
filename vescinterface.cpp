@@ -2329,7 +2329,7 @@ void VescInterface::disconnectPortInternal(bool stopReconnectRequest)
     }
 
 #ifdef HAS_BLUETOOTH
-    if (mBleUart->isConnected()) {
+    if (mBleUart->isConnected() || mBleUart->isConnecting()) {
         mBleUart->disconnectBle();
         updateFwRx(false);
     }
@@ -2409,6 +2409,8 @@ bool VescInterface::reconnectGraceActive() const
 
 void VescInterface::reconnectTimerSlot()
 {
+    static const int maxReconnectAttempts = 5;
+
     if (!mReconnectActive || mReconnectSuppressed) {
         return;
     }
@@ -2432,6 +2434,13 @@ void VescInterface::reconnectTimerSlot()
         return;
     }
 #endif
+
+    if (mReconnectAttempts >= maxReconnectAttempts) {
+        stopReconnect(false);
+        emit statusMessage(tr("Automatic BLE reconnect stopped after %1 attempts. Please connect manually.")
+                           .arg(maxReconnectAttempts), false);
+        return;
+    }
 
     ++mReconnectAttempts;
     emit reconnectStateChanged(true, mReconnectAttempts);

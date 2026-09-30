@@ -423,6 +423,32 @@ Item {
                 }
 
                 Button {
+                    id: dragTestBtn
+                    Layout.preferredHeight: 32
+                    Layout.preferredWidth: 82
+                    padding: 0
+
+                    contentItem: Text {
+                        text: "DRAG TEST"
+                        font.family: "Roboto"
+                        font.bold: true
+                        font.pixelSize: 10
+                        color: dragTestBtn.down ? colWarningAmber : colNeonGreen
+                        horizontalAlignment: Text.AlignHCenter
+                        verticalAlignment: Text.AlignVCenter
+                    }
+
+                    background: Rectangle {
+                        color: dragTestBtn.down ? "#1b3320" : "#0d1d11"
+                        border.color: colNeonGreen
+                        border.width: 1
+                        radius: 4
+                    }
+
+                    onClicked: dragTest.openTest()
+                }
+
+                Button {
                     id: settingsBtn
                     Layout.preferredHeight: 32
                     Layout.preferredWidth: 36
@@ -448,6 +474,19 @@ Item {
                     }
                 }
             }
+        }
+
+        DragTest {
+            id: dragTest
+            currentSpeed: rtBlackGreenRedRoot.speedNow
+            currentPowerW: rtBlackGreenRedRoot.powerNow
+            currentWattHours: rtBlackGreenRedRoot.wattHours
+            currentWattHoursCharged: rtBlackGreenRedRoot.wattHoursCharged
+            currentVoltageV: rtBlackGreenRedRoot.voltageIn
+            currentTempMosC: rtBlackGreenRedRoot.tempMos
+            currentTempMotorC: rtBlackGreenRedRoot.tempMotor
+            speedUnitFact: rtBlackGreenRedRoot.speedUnitFact
+            speedUnitText: rtBlackGreenRedRoot.speedUnitText
         }
 
         // Main Scrollable Area
@@ -2062,6 +2101,7 @@ Item {
             powerNow = values.current_in * voltageIn;
             if (powerNow > powerMax) powerMax = powerNow;
             if (powerNow < powerMinRegen) powerMinRegen = powerNow;
+            dragTest.recordTelemetry(speedNow);
 
             // Odometer & Trip Distance
             totalOdometerKm = (values.odometer / 1000.0) * distUnitFact;
@@ -2143,6 +2183,7 @@ Item {
                 speedNow = Math.abs(speedKmh * impFact);
                 if (speedNow > speedMax) speedMax = speedNow;
             }
+            dragTest.recordTelemetry(speedNow);
 
             var fullV = detectedCells * 4.2;
             var emptyV = detectedCells * 3.2;

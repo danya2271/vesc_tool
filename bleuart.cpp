@@ -104,18 +104,29 @@ void BleUart::disconnectBle()
 {
     init();
 
-    if (mService) {
-        mService->deleteLater();
-        mService = nullptr;
+    mConnectTimeoutTimer.stop();
+    mConnectDone = false;
+    mUartServiceFound = false;
+    mNotificationDescTx = QLowEnergyDescriptor();
+
+    QLowEnergyService *service = mService;
+    mService = nullptr;
+    if (service) {
+        service->deleteLater();
     }
 
-    if (mControl) {
+    QLowEnergyController *control = mControl;
+    mControl = nullptr;
+    if (control) {
         // Stop the native GATT operation before releasing the Qt wrapper.
         // Android can otherwise deliver delayed callbacks from the previous
         // controller after the next reconnect attempt has already started.
-        mControl->disconnectFromDevice();
-        mControl->deleteLater();
-        mControl = nullptr;
+        const QLowEnergyController::ControllerState state = control->state();
+        if (state != QLowEnergyController::UnconnectedState &&
+                state != QLowEnergyController::ClosingState) {
+            control->disconnectFromDevice();
+        }
+        control->deleteLater();
     }
 }
 
@@ -219,6 +230,10 @@ void BleUart::deviceScanError(QBluetoothDeviceDiscoveryAgent::Error e)
 
 void BleUart::serviceDiscovered(const QBluetoothUuid &gatt)
 {
+    if (sender() != mControl) {
+        return;
+    }
+
     if (gatt==QBluetoothUuid(QUuid(mServiceUuid))){
         mUartServiceFound = true;
     }
@@ -242,6 +257,12 @@ void BleUart::serviceScanDone()
 
     if (mUartServiceFound) {
         mService = mControl->createServiceObject(QBluetoothUuid(QUuid(mServiceUuid)), this);
+
+        if (!mService) {
+            qWarning() << "Unable to create BLE UART service";
+            disconnectBle();
+            return;
+        }
 
         connect(mService, SIGNAL(stateChanged(QLowEnergyService::ServiceState)),
                 this, SLOT(serviceStateChanged(QLowEnergyService::ServiceState)));
@@ -306,6 +327,7 @@ void BleUart::serviceStateChanged(QLowEnergyService::ServiceState s)
         //this gets triggered when a connected device is shutoff or goes out of BLE range
         qDebug() << "device disconnected unintentionally";
         emit unintentionalDisconnect();
+        disconnectBle();
         break;
     }
     case QLowEnergyService::ServiceDiscovered: {
@@ -374,10 +396,13 @@ void BleUart::confirmedDescriptorWrite(const QLowEnergyDescriptor &d, const QByt
         return;
     }
 
-    if (d.isValid() && d == mNotificationDescTx && value == QByteArray("0000")) {
-        //disabled notifications -> assume disconnect intent
-        disconnectBle();
-    } else {
+    if (d.isValid() && d == mNotificationDescTx) {
+        if (value == QByteArray::fromHex("0000") || value == QByteArray("0000")) {
+            //disabled notifications -> assume disconnect intent
+            disconnectBle();
+            return;
+        }
+
         mConnectDone = true;
         mConnectTimeoutTimer.stop();
         emit connected();

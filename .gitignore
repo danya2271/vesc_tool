@@ -54,10 +54,11 @@ build_android_signed
 
 res/firmwares/*/
 /build
+/vesc_tool_[0-9]*
+/vesc_tool_makefile
 
 # Nix output
 /result
 
 # VS Code
 .vscode/
-

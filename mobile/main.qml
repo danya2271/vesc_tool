@@ -294,13 +294,15 @@ ApplicationWindow {
 
     SwipeView {
         id: mainSwipeView
-        currentIndex: tabBar.currentIndex
         padding: 0
         leftPadding: 0
         rightPadding: 0
         topPadding: 0
         bottomPadding: 0
         onCurrentIndexChanged: {
+            if (tabBar.currentIndex !== currentIndex) {
+                tabBar.setCurrentIndex(currentIndex)
+            }
             if (isFullscreenHud && currentIndex !== (1 + indexOffset())) {
                 setFullscreenHud(false)
             }
@@ -612,10 +614,16 @@ ApplicationWindow {
 
             TabBar {
                 id: tabBar
-                currentIndex: mainSwipeView.currentIndex
                 Layout.fillWidth: true
                 implicitWidth: 0
                 clip: true
+
+                onCurrentIndexChanged: {
+                    if (mainSwipeView.currentIndex !== currentIndex &&
+                            currentIndex >= 0 && currentIndex < mainSwipeView.count) {
+                        mainSwipeView.setCurrentIndex(currentIndex)
+                    }
+                }
 
                 background: Rectangle {
                     opacity: 1
@@ -1266,6 +1274,9 @@ ApplicationWindow {
                 }
             } else {
                 reconnectDialog.close()
+                if (!VescIf.isPortConnected()) {
+                    connScreen.opened = true
+                }
             }
         }
 
