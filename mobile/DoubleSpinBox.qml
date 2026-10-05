@@ -23,7 +23,8 @@ import QtQuick 2.15
 import QtQuick.Controls 2.15
 
 Item {
-    height: spinbox.implicitHeight
+    implicitWidth: spinbox.implicitWidth
+    implicitHeight: spinbox.implicitHeight
 
     property int decimals: 2
     property real realValue: 0.0
@@ -42,6 +43,10 @@ Item {
         realValue = old
     }
 
+    function escapeRegExp(text) {
+        return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")
+    }
+
     SpinBox {
         id: spinbox
         anchors.fill: parent
@@ -54,9 +59,9 @@ Item {
         to : realTo * factor
         from : realFrom * factor
 
-        validator: DoubleValidator {
-            bottom: Math.min(spinbox.from, spinbox.to) * spinbox.factor
-            top:  Math.max(spinbox.from, spinbox.to) * spinbox.factor
+        validator: RegExpValidator {
+            regExp: new RegExp("^\\s*(?:" + escapeRegExp(prefix) + ")?[-+]?\\d*(?:[.,]\\d{0," +
+                               decimals + "})?\\s*(?:" + escapeRegExp(suffix) + ")?\\s*$")
         }
 
         textFromValue: function(value, locale) {
@@ -70,9 +75,8 @@ Item {
             // phones in general.
             Qt.inputMethod.hide()
 
-            return Math.round(parseFloat(text.replace(",", ".").
-                                         replace(suffix, "").
-                                         replace(prefix, "")) * factor)
+            var parsedValue = parseFloat(text.replace(",", ".").replace(suffix, "").replace(prefix, ""))
+            return isFinite(parsedValue) ? Math.round(parsedValue * factor) : value
         }
 
         onValueChanged: {

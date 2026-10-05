@@ -28,7 +28,9 @@
 (define ramp-fast 0.01)
 (define ramp-erpm-max 4200.0)
 (define ramp-neg 0.32)
-(define loop-time 0.0005)
+(define loop-time 0.002)
+(define control-dt loop-time)
+(define control-last-time (systime))
 
 (define v-min 41.7)
 (define v-cutoff 36.5)
@@ -65,9 +67,8 @@
 (define fast-current-cut 0)
 (define adc-filtered 0.0)
 (define adc-alpha 0.28)
-(define step-down (* boost-current (/ loop-time ramp-neg)))
 
-;; Motion estimator runs at 100 Hz instead of differentiating every 0.5 ms.
+;; Motion estimator samples no faster than 100 Hz using measured elapsed time.
 (define motion-sample-time 0.01)
 (define motion-sample-elapsed 0.0)
 (define motion-initialized 0)
@@ -80,6 +81,15 @@
 ;; Speed envelope and traction cut state.
 (define allowed-erpm 0.0)
 (define traction-cut 1.0)
+(define tc-saving 0)
+(define fw-current-out -1.0)
+(define fw-update-elapsed 0.0)
+(define throttle-armed 0)
+(define vt-adc 0.0)
+(define vt-current 0.0)
+(define vt-erpm 0.0)
+(define vt-accel 0.0)
+(define vt-armed 0)
 
 ;; ====== 5. HELPERS AND EEPROM CONFIGURATION ======
 (defun clamp (value low high)
@@ -88,14 +98,19 @@
         (if (> value high) high value)))
 
 (defun tc-load-defaults ()
-    (setvar 'traction-control-enabled 1)
-    (setvar 'acceleration-limit-enabled 1)
-    (setvar 'max-accel-ms2 1.5)
-    (setvar 'accel-soft-band-ms2 0.5)
-    (setvar 'slip-threshold-erpm 400.0)
-    (setvar 'penalty-factor 0.10)
-    (setvar 'recovery-rate 0.02)
-    (setvar 'envelope-soft-band-erpm 200.0))
+    (progn
+        (setvar 'traction-control-enabled 1)
+        (setvar 'acceleration-limit-enabled 1)
+        (setvar 'max-accel-ms2 1.5)
+        (setvar 'accel-soft-band-ms2 0.5)
+        (setvar 'slip-threshold-erpm 400.0)
+        (setvar 'penalty-factor 0.10)
+        (setvar 'recovery-rate 0.02)
+        (setvar 'envelope-soft-band-erpm 200.0)))
+
+(defun tc-read-float (address fallback low high)
+    (let ((value (eeprom-read-f address)))
+        (if (and (number? value) (>= value low) (<= value high)) value fallback)))
 
 (defun tc-load-config ()
     (let ((version (eeprom-read-i tc-eeprom-version-address)))
@@ -107,54 +122,70 @@
                     (setvar 'acceleration-limit-enabled
                             (if (= (eeprom-read-i tc-eeprom-accel-limit-enabled-address) 0) 0 1))
                     (setvar 'max-accel-ms2
-                            (clamp (eeprom-read-f tc-eeprom-max-accel-address) 0.1 10.0))
+                            (tc-read-float tc-eeprom-max-accel-address 1.5 0.1 10.0))
                     (setvar 'accel-soft-band-ms2
-                            (clamp (eeprom-read-f tc-eeprom-accel-band-address) 0.1 3.0))
+                            (tc-read-float tc-eeprom-accel-band-address 0.5 0.1 3.0))
                     (setvar 'slip-threshold-erpm
-                            (clamp (eeprom-read-f tc-eeprom-slip-threshold-address) 0.0 3000.0))
+                            (tc-read-float tc-eeprom-slip-threshold-address 400.0 0.0 3000.0))
                     (setvar 'penalty-factor
-                            (clamp (eeprom-read-f tc-eeprom-penalty-address) 0.01 1.0))
+                            (tc-read-float tc-eeprom-penalty-address 0.10 0.01 1.0))
                     (setvar 'recovery-rate
-                            (clamp (eeprom-read-f tc-eeprom-recovery-address) 0.001 1.0))
+                            (tc-read-float tc-eeprom-recovery-address 0.02 0.001 1.0))
                     (setvar 'envelope-soft-band-erpm
-                            (clamp (eeprom-read-f tc-eeprom-envelope-band-address) 1.0 3000.0)))
+                            (tc-read-float tc-eeprom-envelope-band-address 200.0 1.0 3000.0)))
                 (tc-load-defaults))
             (tc-load-defaults))))
 
 (defun tc-save-config ()
-    ;; EEPROM writes stop the motor briefly. This function is called only by
-    ;; tc-set-config, never from the control loop.
-    (eeprom-store-i tc-eeprom-enabled-address traction-control-enabled)
-    (eeprom-store-i tc-eeprom-accel-limit-enabled-address acceleration-limit-enabled)
-    (eeprom-store-f tc-eeprom-max-accel-address max-accel-ms2)
-    (eeprom-store-f tc-eeprom-accel-band-address accel-soft-band-ms2)
-    (eeprom-store-f tc-eeprom-slip-threshold-address slip-threshold-erpm)
-    (eeprom-store-f tc-eeprom-penalty-address penalty-factor)
-    (eeprom-store-f tc-eeprom-recovery-address recovery-rate)
-    (eeprom-store-f tc-eeprom-envelope-band-address envelope-soft-band-erpm)
-    ;; Commit marker is written last so a power loss keeps the old version invalid.
-    (eeprom-store-i tc-eeprom-version-address tc-eeprom-version))
+    (and
+        (eeprom-store-i tc-eeprom-version-address 0)
+        (eeprom-store-i tc-eeprom-enabled-address traction-control-enabled)
+        (eeprom-store-i tc-eeprom-accel-limit-enabled-address acceleration-limit-enabled)
+        (eeprom-store-f tc-eeprom-max-accel-address max-accel-ms2)
+        (eeprom-store-f tc-eeprom-accel-band-address accel-soft-band-ms2)
+        (eeprom-store-f tc-eeprom-slip-threshold-address slip-threshold-erpm)
+        (eeprom-store-f tc-eeprom-penalty-address penalty-factor)
+        (eeprom-store-f tc-eeprom-recovery-address recovery-rate)
+        (eeprom-store-f tc-eeprom-envelope-band-address envelope-soft-band-erpm)
+        (eeprom-store-i tc-eeprom-version-address tc-eeprom-version)))
 
 (defun tc-vehicle-stopped ()
-    (if (< (abs (get-rpm)) 20.0)
-        (if (< (abs (get-current)) 1.0) t nil)
-        nil))
+    (and (< (abs (get-rpm)) 20.0)
+         (< (abs (get-current)) 1.0)
+         (< (map-voltage (get-adc 0)) 0.05)))
+
+(defun tc-get-config ()
+    (print (str-merge "TC_CONFIG "
+        (str-join
+            (map (lambda (value) (str-from-n value "%.4f"))
+                (list (to-float traction-control-enabled)
+                      (to-float acceleration-limit-enabled)
+                      max-accel-ms2 accel-soft-band-ms2 slip-threshold-erpm
+                      penalty-factor recovery-rate envelope-soft-band-erpm)) " "))))
 
 ;; Called from VESC Tool Android through COMM_LISP_REPL_CMD.
 (defun tc-set-config (enabled accel-limit-enabled max-accel accel-band slip-threshold-value penalty recovery envelope-band)
-    (setvar 'traction-control-enabled (if (= enabled 0) 0 1))
-    (setvar 'acceleration-limit-enabled (if (= accel-limit-enabled 0) 0 1))
-    (setvar 'max-accel-ms2 (clamp max-accel 0.1 10.0))
-    (setvar 'accel-soft-band-ms2 (clamp accel-band 0.1 3.0))
-    (setvar 'slip-threshold-erpm (clamp slip-threshold-value 0.0 3000.0))
-    (setvar 'penalty-factor (clamp penalty 0.01 1.0))
-    (setvar 'recovery-rate (clamp recovery 0.001 1.0))
-    (setvar 'envelope-soft-band-erpm (clamp envelope-band 1.0 3000.0))
-    (if (tc-vehicle-stopped)
-        (progn
-            (tc-save-config)
-            (print "TC_CONFIG_SAVED"))
-        (print "TC_CONFIG_APPLIED_RAM_ONLY_STOP_VEHICLE_TO_SAVE")))
+    (progn
+        (setvar 'traction-control-enabled (if (= enabled 0) 0 1))
+        (setvar 'acceleration-limit-enabled (if (= accel-limit-enabled 0) 0 1))
+        (setvar 'max-accel-ms2 (clamp max-accel 0.1 10.0))
+        (setvar 'accel-soft-band-ms2 (clamp accel-band 0.1 3.0))
+        (setvar 'slip-threshold-erpm (clamp slip-threshold-value 0.0 3000.0))
+        (setvar 'penalty-factor (clamp penalty 0.01 1.0))
+        (setvar 'recovery-rate (clamp recovery 0.001 1.0))
+        (setvar 'envelope-soft-band-erpm (clamp envelope-band 1.0 3000.0))
+        (if (tc-vehicle-stopped)
+            (progn
+                (setvar 'tc-saving 1)
+                (set-current 0.0)
+                (setvar 'current-out 0.0)
+                (if (tc-save-config)
+                    (print "TC_CONFIG_SAVED")
+                    (print "TC_CONFIG_SAVE_FAILED"))
+                (setvar 'control-last-time (systime))
+                (setvar 'tc-saving 0))
+            (print "TC_CONFIG_APPLIED_RAM_ONLY_STOP_VEHICLE_TO_SAVE"))
+        (tc-get-config)))
 
 ;; ====== 6. THROTTLE FUNCTIONS ======
 (defun map-voltage (v)
@@ -169,7 +200,7 @@
 (defun get-dynamic-step-up (erpm)
     (let ((progress (if (> erpm ramp-erpm-max) 1.0 (/ erpm ramp-erpm-max))))
         (let ((current-ramp (- ramp-start (* progress (- ramp-start ramp-fast)))))
-            (* boost-current (/ loop-time current-ramp)))))
+            (* boost-current (/ control-dt current-ramp)))))
 
 (defun get-ramped (target current erpm)
     (if (> target current)
@@ -178,7 +209,7 @@
                 (if (> new-c target) target new-c)))
         (let ((rpm-factor (+ 1.0 (/ erpm 4000.0))))
             (let ((down-time (if (= fast-current-cut 1) 0.05 ramp-neg)))
-                (let ((down-step (* boost-current (/ loop-time down-time))))
+                (let ((down-step (* boost-current (/ control-dt down-time))))
                     (let ((new-c (- current (* down-step rpm-factor))))
                         (if (< new-c target) target new-c)))))))
 
@@ -218,7 +249,7 @@
     (* (* (* max-accel-ms2 3.6) erpm-per-kmh) sample-time))
 
 (defun update-motion-estimator (erpm)
-    (let ((elapsed (+ motion-sample-elapsed loop-time)))
+    (let ((elapsed (+ motion-sample-elapsed control-dt)))
         (if (>= elapsed motion-sample-time)
             (progn
                 (setvar 'motion-sample-elapsed 0.0)
@@ -236,11 +267,12 @@
                                (/ (/ (- filtered-speed speed-last-sampled-erpm)
                                      erpm-per-kmh)
                                   (* 3.6 elapsed))))
-                            (setvar 'speed-filtered-erpm filtered-speed)
-                            (setvar 'speed-last-sampled-erpm filtered-speed)
-                            (setvar 'measured-accel-ms2
-                                    (+ (* motion-accel-alpha raw-accel)
-                                       (* (- 1.0 motion-accel-alpha) measured-accel-ms2)))))))
+                            (progn
+                                (setvar 'speed-filtered-erpm filtered-speed)
+                                (setvar 'speed-last-sampled-erpm filtered-speed)
+                                (setvar 'measured-accel-ms2
+                                        (+ (* motion-accel-alpha raw-accel)
+                                           (* (- 1.0 motion-accel-alpha) measured-accel-ms2))))))))
             (setvar 'motion-sample-elapsed elapsed))))
 
 (defun get-accel-multiplier ()
@@ -264,7 +296,7 @@
                 (setvar 'allowed-erpm speed-filtered-erpm)
                 (setvar 'traction-cut 1.0)
                 1.0)
-            (let ((max-step (get-max-erpm-step loop-time)))
+            (let ((max-step (get-max-erpm-step control-dt)))
                 (progn
                     (let ((next-allowed (+ allowed-erpm max-step)))
                         (if (> speed-filtered-erpm next-allowed)
@@ -278,7 +310,7 @@
                                 (setvar 'traction-cut
                                         (+ traction-cut
                                            (* (- 1.0 traction-cut)
-                                              (* recovery-rate (/ loop-time motion-sample-time))))))
+                                              (clamp (* recovery-rate (/ control-dt motion-sample-time)) 0.0 1.0)))))
 
                             (let ((envelope-multiplier
                                    (if (<= envelope-excess 0.0)
@@ -291,15 +323,16 @@
                                     traction-cut
                                     envelope-multiplier)))))))))
 
-;; Load persistent settings before starting the control loop.
-(tc-load-config)
-
 ;; ====== 8. MAIN CONTROL LOOP ======
-(loopwhile t
+(defun control-step ()
     (progn
+        (setvar 'control-dt (clamp (secs-since control-last-time) 0.0001 0.05))
+        (setvar 'control-last-time (systime))
         (let ((raw-v (get-adc 0))
               (raw-rpm (get-rpm)))
             (progn
+                (if (< (map-voltage raw-v) 0.05)
+                    (setvar 'throttle-armed 1))
                 (setvar 'adc-filtered
                         (+ (* adc-alpha raw-v) (* (- 1.0 adc-alpha) adc-filtered)))
 
@@ -307,26 +340,58 @@
                       (linear-throttle (map-voltage adc-filtered)))
                     (progn
                         (update-motion-estimator erpm)
-                        (conf-set 'foc-fw-current-max (calc-fw linear-throttle))
+                        (setvar 'fw-update-elapsed (+ fw-update-elapsed control-dt))
+                        (let ((fw-target (if (or (= tc-saving 1)
+                                                (= throttle-armed 0)
+                                                (<= (get-vin) v-cutoff))
+                                            0.0
+                                            (calc-fw linear-throttle))))
+                            (if (or (< fw-current-out 0.0)
+                                    (and (= fw-target 0.0) (> fw-current-out 0.0))
+                                    (and (>= fw-update-elapsed 0.02)
+                                         (> (abs (- fw-target fw-current-out)) 0.1)))
+                                (progn
+                                    (conf-set 'foc-fw-current-max fw-target)
+                                    (setvar 'fw-current-out fw-target)
+                                    (setvar 'fw-update-elapsed 0.0))))
 
                         (let ((throttle (calc-throttle linear-throttle))
                               (accel-multiplier (get-accel-multiplier))
-                              (traction-multiplier (get-traction-multiplier erpm linear-throttle)))
+                              (traction-multiplier (get-traction-multiplier erpm linear-throttle))
+                              (voltage-multiplier (get-voltage-multiplier)))
                             (let ((current-max-allowed
-                                   (* (get-dynamic-max erpm) (get-voltage-multiplier))))
-                            (let ((control-multiplier
-                                   (if (< accel-multiplier traction-multiplier)
-                                       accel-multiplier
-                                       traction-multiplier)))
-                                (setvar 'fast-current-cut
-                                        (if (< control-multiplier 0.95) 1 0))
-                                (let ((target-current
-                                           (if (< linear-throttle 0.05)
-                                               (if (> erpm min-erpm) idle-current 0.0)
-                                               (* (* throttle current-max-allowed)
-                                                  control-multiplier))))
-                                        (let ((new-current
-                                               (get-ramped target-current current-out erpm)))
-                                            (setvar 'current-out new-current)
-                                            (set-current new-current))))))))))
+                                   (* (get-dynamic-max erpm) voltage-multiplier)))
+                                (let ((control-multiplier
+                                       (if (< accel-multiplier traction-multiplier)
+                                           accel-multiplier
+                                           traction-multiplier)))
+                                    (progn
+                                        (setvar 'fast-current-cut
+                                                (if (< control-multiplier 0.95) 1 0))
+                                        (let ((target-current
+                                               (if (< linear-throttle 0.05)
+                                                   (* (if (> erpm min-erpm) idle-current 0.0)
+                                                      voltage-multiplier)
+                                                   (* (* throttle current-max-allowed)
+                                                      control-multiplier))))
+                                            (let ((new-current
+                                                   (if (or (= tc-saving 1)
+                                                           (= throttle-armed 0)
+                                                           (<= voltage-multiplier 0.0))
+                                                       0.0
+                                                       (get-ramped target-current current-out erpm))))
+                                                (progn
+                                                    (setvar 'current-out new-current)
+                                                    (set-current new-current)
+                                                    (setvar 'vt-adc raw-v)
+                                                    (setvar 'vt-current new-current)
+                                                    (setvar 'vt-erpm erpm)
+                                                    (setvar 'vt-accel measured-accel-ms2)
+                                                    (setvar 'vt-armed throttle-armed))))))))))))))
+
+(tc-load-config)
+(setvar 'control-last-time (systime))
+(loopwhile t
+    (progn
+        (control-step)
         (sleep loop-time)))

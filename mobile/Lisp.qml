@@ -35,6 +35,58 @@ Item {
     property real tractionRecoveryRate: 0.02
     property real tractionEnvelopeSoftBandErpm: 200.0
     property string tractionConfigStatus: "Load the traction preset first"
+    property bool tractionConfigPending: false
+    property bool tractionConfigReadPending: false
+    property string tractionSaveResult: ""
+
+    function requestTractionConfig() {
+        if (!VescIf.isPortConnected() || tractionConfigPending || tractionConfigReadPending) {
+            return
+        }
+        tractionConfigReadPending = true
+        tractionSaveResult = ""
+        tractionConfigStatus = "Reading from LispBM..."
+        tractionConfigTimeoutTimer.restart()
+        mCommands.lispSendReplCmd("(tc-get-config)")
+    }
+
+    function handleTractionReply(str) {
+        if (!tractionConfigPending && !tractionConfigReadPending) {
+            return
+        }
+        if (str.indexOf("TC_CONFIG_SAVED") >= 0) {
+            tractionSaveResult = "Saved to controller EEPROM"
+        } else if (str.indexOf("TC_CONFIG_SAVE_FAILED") >= 0) {
+            tractionSaveResult = "Applied in RAM; EEPROM save failed"
+        } else if (str.indexOf("TC_CONFIG_APPLIED_RAM_ONLY") >= 0) {
+            tractionSaveResult = "Applied in RAM only; stop and release throttle to save"
+        }
+
+        var match = str.match(/TC_CONFIG\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)\s+([-+0-9.eE]+)/)
+        if (match) {
+            var values = []
+            for (var index = 1; index <= 8; index++) {
+                var value = Number(match[index])
+                if (!isFinite(value)) {
+                    return
+                }
+                values.push(value)
+            }
+            tractionControlEnabled = values[0] !== 0
+            accelerationLimitEnabled = values[1] !== 0
+            tractionMaxAccelMs2 = values[2]
+            tractionAccelSoftBandMs2 = values[3]
+            tractionSlipThresholdErpm = values[4]
+            tractionPenaltyFactor = values[5]
+            tractionRecoveryRate = values[6]
+            tractionEnvelopeSoftBandErpm = values[7]
+            tractionConfigStatus = tractionSaveResult.length > 0 ? tractionSaveResult :
+                                   (tractionConfigPending ? "Applied; EEPROM save not confirmed" : "Read from LispBM")
+            tractionConfigPending = false
+            tractionConfigReadPending = false
+            tractionConfigTimeoutTimer.stop()
+        }
+    }
 
     function fileUrlToPath(url) {
         var path = decodeURIComponent(url.toString())
@@ -128,46 +180,6 @@ Item {
         }
     }
 
-    function updateTractionConfigFromGlobals(globals) {
-        if (globals === undefined || globals === null || !Array.isArray(globals)) {
-            return
-        }
-
-        var found = false
-        for (var i = 0; i < globals.length; i++) {
-            var g = globals[i]
-            if (g.name === "traction-control-enabled") {
-                tractionControlEnabled = parseFloat(g.value) >= 0.5
-                found = true
-            } else if (g.name === "acceleration-limit-enabled") {
-                accelerationLimitEnabled = parseFloat(g.value) >= 0.5
-                found = true
-            } else if (g.name === "max-accel-ms2") {
-                tractionMaxAccelMs2 = parseFloat(g.value)
-                found = true
-            } else if (g.name === "accel-soft-band-ms2") {
-                tractionAccelSoftBandMs2 = parseFloat(g.value)
-                found = true
-            } else if (g.name === "slip-threshold-erpm") {
-                tractionSlipThresholdErpm = parseFloat(g.value)
-                found = true
-            } else if (g.name === "penalty-factor") {
-                tractionPenaltyFactor = parseFloat(g.value)
-                found = true
-            } else if (g.name === "recovery-rate") {
-                tractionRecoveryRate = parseFloat(g.value)
-                found = true
-            } else if (g.name === "envelope-soft-band-erpm") {
-                tractionEnvelopeSoftBandErpm = parseFloat(g.value)
-                found = true
-            }
-        }
-
-        if (found) {
-            tractionConfigStatus = "Read from LispBM"
-        }
-    }
-
     function increaseEditorFont() {
         editorFontSize = Math.min(36, editorFontSize + 1)
     }
@@ -232,9 +244,21 @@ Item {
 
     Timer {
         id: tractionConfigRefreshTimer
-        interval: 500
+        interval: 750
         repeat: false
-        onTriggered: mCommands.lispGetStats(true)
+        onTriggered: requestTractionConfig()
+    }
+
+    Timer {
+        id: tractionConfigTimeoutTimer
+        interval: 6000
+        repeat: false
+        onTriggered: {
+            tractionConfigStatus = tractionSaveResult.length > 0 ? tractionSaveResult + "; readback timed out" :
+                                   "No acknowledgement. Upload and run the updated smart traction preset; check REPL errors."
+            tractionConfigPending = false
+            tractionConfigReadPending = false
+        }
     }
 
     QSettings.Settings {
@@ -318,10 +342,10 @@ Item {
         id: statsPollTimer
         interval: Math.max(50, Math.round(1000 / Math.max(1, statsPollHz)))
         repeat: true
-        running: lispPageItem.visible && VescIf.isPortConnected() && pollStatsBox.checked
+        running: lispPageItem.visible && pollStatsBox.checked
         onTriggered: {
             if (VescIf.isPortConnected() && pollStatsBox.checked) {
-                mCommands.lispGetStats(true)
+                mCommands.lispGetStats(lispTabBar.currentIndex === 2 && allGlobalsBox.checked)
             }
         }
     }
@@ -411,6 +435,8 @@ Item {
             onCurrentIndexChanged: {
                 if (currentIndex === 3) {
                     tractionConfigRefreshTimer.restart()
+                } else if (currentIndex === 2 && VescIf.isPortConnected()) {
+                    mCommands.lispGetStats(allGlobalsBox.checked)
                 }
             }
 
@@ -876,6 +902,17 @@ Item {
                     }
                 }
 
+                CheckBox {
+                    id: allGlobalsBox
+                    text: "All globals (firmware may truncate the list)"
+                    checked: false
+                    onCheckedChanged: {
+                        if (VescIf.isPortConnected()) {
+                            mCommands.lispGetStats(checked)
+                        }
+                    }
+                }
+
                 RowLayout {
                     Layout.fillWidth: true
 
@@ -901,7 +938,7 @@ Item {
 
                     Button {
                         text: "Refresh"
-                        onClicked: mCommands.lispGetStats(true)
+                        onClicked: mCommands.lispGetStats(allGlobalsBox.checked)
                     }
                 }
             }
@@ -911,12 +948,14 @@ Item {
                 spacing: 8
 
                 ScrollView {
+                    id: tractionScroll
                     Layout.fillWidth: true
                     Layout.fillHeight: true
+                    contentWidth: availableWidth
                     clip: true
 
                     ColumnLayout {
-                        width: parent.width
+                        width: tractionScroll.availableWidth
                         spacing: 8
 
                         Label {
@@ -950,6 +989,7 @@ Item {
                             DoubleSpinBox {
                                 id: tractionMaxAccelBox
                                 Layout.preferredWidth: 145
+                                Layout.preferredHeight: implicitHeight
                                 decimals: 2
                                 realFrom: 0.1
                                 realTo: 10.0
@@ -969,6 +1009,7 @@ Item {
                             DoubleSpinBox {
                                 id: tractionAccelBandBox
                                 Layout.preferredWidth: 145
+                                Layout.preferredHeight: implicitHeight
                                 decimals: 2
                                 realFrom: 0.1
                                 realTo: 3.0
@@ -988,6 +1029,7 @@ Item {
                             DoubleSpinBox {
                                 id: tractionSlipThresholdBox
                                 Layout.preferredWidth: 145
+                                Layout.preferredHeight: implicitHeight
                                 decimals: 0
                                 realFrom: 0.0
                                 realTo: 3000.0
@@ -1007,6 +1049,7 @@ Item {
                             DoubleSpinBox {
                                 id: tractionPenaltyBox
                                 Layout.preferredWidth: 145
+                                Layout.preferredHeight: implicitHeight
                                 decimals: 2
                                 realFrom: 0.01
                                 realTo: 1.0
@@ -1025,6 +1068,7 @@ Item {
                             DoubleSpinBox {
                                 id: tractionRecoveryBox
                                 Layout.preferredWidth: 145
+                                Layout.preferredHeight: implicitHeight
                                 decimals: 3
                                 realFrom: 0.001
                                 realTo: 1.0
@@ -1043,6 +1087,7 @@ Item {
                             DoubleSpinBox {
                                 id: tractionEnvelopeBandBox
                                 Layout.preferredWidth: 145
+                                Layout.preferredHeight: implicitHeight
                                 decimals: 0
                                 realFrom: 1.0
                                 realTo: 3000.0
@@ -1059,7 +1104,16 @@ Item {
                             Button {
                                 text: "Apply and save"
                                 Layout.fillWidth: true
+                                enabled: !tractionConfigPending && !tractionConfigReadPending
                                 onClicked: {
+                                    if (!VescIf.isPortConnected()) {
+                                        tractionConfigStatus = "Not connected"
+                                        return
+                                    }
+                                    tractionConfigPending = true
+                                    tractionSaveResult = ""
+                                    tractionConfigStatus = "Waiting for controller acknowledgement..."
+                                    tractionConfigTimeoutTimer.restart()
                                     mCommands.lispSetTractionControlConfig(
                                                 tractionControlEnabled,
                                                 accelerationLimitEnabled,
@@ -1069,13 +1123,12 @@ Item {
                                                 tractionPenaltyFactor,
                                                 tractionRecoveryRate,
                                                 tractionEnvelopeSoftBandErpm)
-                                    tractionConfigStatus = "Sent to LispBM; reading back..."
-                                    tractionConfigRefreshTimer.restart()
                                 }
                             }
 
                             Button {
                                 text: "Defaults"
+                                enabled: !tractionConfigPending && !tractionConfigReadPending
                                 onClicked: {
                                     tractionControlEnabled = true
                                     accelerationLimitEnabled = true
@@ -1088,6 +1141,13 @@ Item {
                                     tractionConfigStatus = "Defaults selected; press Apply and save"
                                 }
                             }
+                        }
+
+                        Button {
+                            text: "Read from controller"
+                            Layout.fillWidth: true
+                            enabled: !tractionConfigPending && !tractionConfigReadPending
+                            onClicked: requestTractionConfig()
                         }
 
                         Label {
@@ -1107,6 +1167,7 @@ Item {
 
         function onLispPrintReceived(str) {
             appendConsole(str)
+            handleTractionReply(str)
         }
 
         function onLispRunningResRx(ok) {
@@ -1138,14 +1199,11 @@ Item {
                 lispDoneCtxR = stats.done_ctx_r
             }
 
-            updateTractionConfigFromGlobals(stats.globals)
-
-            bindingModel.clear()
-
-            if (stats.globals === undefined || stats.globals === null || !Array.isArray(stats.globals)) {
+            if (lispTabBar.currentIndex !== 2 || stats.globals === undefined || stats.globals === null) {
                 return
             }
 
+            bindingModel.clear()
             for (var i = 0; i < stats.globals.length; i++) {
                 var g = stats.globals[i]
                 if (g.name !== undefined && g.value !== undefined) {
