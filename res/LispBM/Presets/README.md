@@ -26,7 +26,7 @@ size-limited global-variable statistics packet:
 ```
 
 Arguments are traction enabled, acceleration governor enabled, maximum
-acceleration, acceleration soft band, slip threshold in ERPM, penalty factor,
+acceleration, acceleration recovery band, slip threshold in ERPM, penalty factor,
 recovery rate, and speed-envelope soft band in ERPM.
 
 **Apply and save** updates RAM immediately. EEPROM is written only when motor
@@ -36,16 +36,42 @@ missing acknowledgements. EEPROM slots 0–8 are reserved for this preset; do no
 share them with another script. Failed/incomplete writes invalidate the version
 marker so the preset can fall back to defaults on restart.
 
+## Smooth limiting and preload
+
+The acceleration governor maintains a current ceiling instead of multiplying
+the full throttle request by a factor that switches between 0 and 1. It lowers
+this ceiling on new acceleration samples, holds it in a recovery deadband, and
+raises it gradually when acceleration falls below that band. Recovery is
+inhibited while another limit holds actual commanded current below the ceiling.
+The recovery band extends below the configured maximum acceleration, and is
+capped at half that maximum. Disabling traction control does not disable this
+independent acceleration governor.
+
+With the throttle pressed, both governors preserve the configured `idle-current`
+preload (default **1 A**), but never request more than the throttle/battery-limited
+current demand. The startup interlock, battery cutoff and EEPROM-write interlock
+still command zero. Releasing the throttle at standstill also requests zero;
+above `min-erpm` the original coasting preload remains voltage-derated.
+
+An unloaded wheel can accelerate faster than the configured limit even at 1 A.
+A mandatory positive preload and a strict acceleration limit cannot both be
+satisfied in that situation. This preset prioritizes preload over cutting to
+zero during ordinary acceleration/traction limiting. Set `idle-current` to 0
+in the script if positive preload is not wanted; safety cutoffs are unaffected.
+
 ## Diagnostics and limitations
 
 Auto Poll defaults to compact `vt-*` telemetry: raw throttle voltage (`vt-adc`),
 commanded current (`vt-current`), motor ERPM (`vt-erpm`), filtered acceleration
-(`vt-accel`), and startup interlock (`vt-armed`, 1 after throttle release).
+(`vt-accel`), startup interlock (`vt-armed`, 1 after throttle release), and the
+persistent acceleration current ceiling (`vt-limit-current`).
 **All globals** also requests configuration and internal variables, but firmware
 may truncate this list. Configuration readback does not depend on that list.
 
-The governor uses elapsed wall-clock time for ramping and acceleration
-estimation, and limits repeated field-weakening configuration updates.
+The current loop sleeps for 5 ms between iterations, and uses elapsed wall-clock
+time for ramping and acceleration estimation. Acceleration feedback is updated
+on motion samples rather than every current-loop iteration. Repeated
+field-weakening configuration updates are rate-limited.
 Battery cutoff inhibits both drive current and field weakening.
 
 Motor ERPM alone cannot establish actual vehicle acceleration or true wheel

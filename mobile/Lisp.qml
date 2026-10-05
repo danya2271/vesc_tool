@@ -1004,7 +1004,7 @@ Item {
                             Layout.fillWidth: true
                             Label {
                                 Layout.fillWidth: true
-                                text: "Acceleration soft band"
+                                text: "Acceleration recovery band"
                             }
                             DoubleSpinBox {
                                 id: tractionAccelBandBox
