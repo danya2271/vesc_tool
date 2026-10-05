@@ -463,6 +463,10 @@ bool CodeLoader::lispUploadString(QString codeStr, QString editorPath, bool redu
         return false;
     }
 
+    if (!lispErase(vb.size() + 100)) {
+        return false;
+    }
+
     return lispUpload(vb);
 }
 
