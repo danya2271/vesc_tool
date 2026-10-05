@@ -26,6 +26,15 @@ Item {
     property bool lispHeaderStatsVisible: true
     property int statsPollHz: 2
     property int editorFontSize: 12
+    property bool tractionControlEnabled: true
+    property bool accelerationLimitEnabled: true
+    property real tractionMaxAccelMs2: 1.5
+    property real tractionAccelSoftBandMs2: 0.5
+    property real tractionSlipThresholdErpm: 400.0
+    property real tractionPenaltyFactor: 0.1
+    property real tractionRecoveryRate: 0.02
+    property real tractionEnvelopeSoftBandErpm: 200.0
+    property string tractionConfigStatus: "Load the traction preset first"
 
     function fileUrlToPath(url) {
         var path = decodeURIComponent(url.toString())
@@ -119,6 +128,46 @@ Item {
         }
     }
 
+    function updateTractionConfigFromGlobals(globals) {
+        if (globals === undefined || globals === null || !Array.isArray(globals)) {
+            return
+        }
+
+        var found = false
+        for (var i = 0; i < globals.length; i++) {
+            var g = globals[i]
+            if (g.name === "traction-control-enabled") {
+                tractionControlEnabled = parseFloat(g.value) >= 0.5
+                found = true
+            } else if (g.name === "acceleration-limit-enabled") {
+                accelerationLimitEnabled = parseFloat(g.value) >= 0.5
+                found = true
+            } else if (g.name === "max-accel-ms2") {
+                tractionMaxAccelMs2 = parseFloat(g.value)
+                found = true
+            } else if (g.name === "accel-soft-band-ms2") {
+                tractionAccelSoftBandMs2 = parseFloat(g.value)
+                found = true
+            } else if (g.name === "slip-threshold-erpm") {
+                tractionSlipThresholdErpm = parseFloat(g.value)
+                found = true
+            } else if (g.name === "penalty-factor") {
+                tractionPenaltyFactor = parseFloat(g.value)
+                found = true
+            } else if (g.name === "recovery-rate") {
+                tractionRecoveryRate = parseFloat(g.value)
+                found = true
+            } else if (g.name === "envelope-soft-band-erpm") {
+                tractionEnvelopeSoftBandErpm = parseFloat(g.value)
+                found = true
+            }
+        }
+
+        if (found) {
+            tractionConfigStatus = "Read from LispBM"
+        }
+    }
+
     function increaseEditorFont() {
         editorFontSize = Math.min(36, editorFontSize + 1)
     }
@@ -179,6 +228,13 @@ Item {
             }
             enableDialog()
         }
+    }
+
+    Timer {
+        id: tractionConfigRefreshTimer
+        interval: 500
+        repeat: false
+        onTriggered: mCommands.lispGetStats(true)
     }
 
     QSettings.Settings {
@@ -352,6 +408,11 @@ Item {
         TabBar {
             id: lispTabBar
             Layout.fillWidth: true
+            onCurrentIndexChanged: {
+                if (currentIndex === 3) {
+                    tractionConfigRefreshTimer.restart()
+                }
+            }
 
             TabButton {
                 text: "Editor"
@@ -363,6 +424,10 @@ Item {
 
             TabButton {
                 text: "Stats"
+            }
+
+            TabButton {
+                text: "Traction"
             }
         }
 
@@ -543,6 +608,16 @@ Item {
                                 text: "Open Example..."
                                 onTriggered: {
                                     exampleDialog.open()
+                                }
+                            }
+
+                            MenuItem {
+                                text: "Open Smart Traction Preset"
+                                onTriggered: {
+                                    editorText.text = Utility.arr2str(
+                                                Utility.readAllFromFile(
+                                                    ":/res/LispBM/Presets/smart_throttle_traction_control.lbm"))
+                                    currentFilePath = ""
                                 }
                             }
 
@@ -830,6 +905,200 @@ Item {
                     }
                 }
             }
+
+            // === Traction control tab ===
+            ColumnLayout {
+                spacing: 8
+
+                ScrollView {
+                    Layout.fillWidth: true
+                    Layout.fillHeight: true
+                    clip: true
+
+                    ColumnLayout {
+                        width: parent.width
+                        spacing: 8
+
+                        Label {
+                            Layout.fillWidth: true
+                            wrapMode: Text.WordWrap
+                            text: "These controls configure the smart throttle preset. " +
+                                  "Without a wheel-speed sensor, traction control is an ERPM-based estimate."
+                            color: "#bdbdbd"
+                        }
+
+                        CheckBox {
+                            id: tractionEnabledBox
+                            text: "Enable traction control"
+                            checked: tractionControlEnabled
+                            onCheckedChanged: tractionControlEnabled = checked
+                        }
+
+                        CheckBox {
+                            id: accelerationLimitEnabledBox
+                            text: "Enable maximum acceleration limit"
+                            checked: accelerationLimitEnabled
+                            onCheckedChanged: accelerationLimitEnabled = checked
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Maximum acceleration"
+                            }
+                            DoubleSpinBox {
+                                id: tractionMaxAccelBox
+                                Layout.preferredWidth: 145
+                                decimals: 2
+                                realFrom: 0.1
+                                realTo: 10.0
+                                realStepSize: 0.1
+                                realValue: tractionMaxAccelMs2
+                                suffix: " m/s²"
+                                onRealValueChanged: tractionMaxAccelMs2 = realValue
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Acceleration soft band"
+                            }
+                            DoubleSpinBox {
+                                id: tractionAccelBandBox
+                                Layout.preferredWidth: 145
+                                decimals: 2
+                                realFrom: 0.1
+                                realTo: 3.0
+                                realStepSize: 0.1
+                                realValue: tractionAccelSoftBandMs2
+                                suffix: " m/s²"
+                                onRealValueChanged: tractionAccelSoftBandMs2 = realValue
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Slip threshold"
+                            }
+                            DoubleSpinBox {
+                                id: tractionSlipThresholdBox
+                                Layout.preferredWidth: 145
+                                decimals: 0
+                                realFrom: 0.0
+                                realTo: 3000.0
+                                realStepSize: 25.0
+                                realValue: tractionSlipThresholdErpm
+                                suffix: " ERPM"
+                                onRealValueChanged: tractionSlipThresholdErpm = realValue
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Slip penalty"
+                            }
+                            DoubleSpinBox {
+                                id: tractionPenaltyBox
+                                Layout.preferredWidth: 145
+                                decimals: 2
+                                realFrom: 0.01
+                                realTo: 1.0
+                                realStepSize: 0.01
+                                realValue: tractionPenaltyFactor
+                                onRealValueChanged: tractionPenaltyFactor = realValue
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Recovery rate"
+                            }
+                            DoubleSpinBox {
+                                id: tractionRecoveryBox
+                                Layout.preferredWidth: 145
+                                decimals: 3
+                                realFrom: 0.001
+                                realTo: 1.0
+                                realStepSize: 0.005
+                                realValue: tractionRecoveryRate
+                                onRealValueChanged: tractionRecoveryRate = realValue
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+                            Label {
+                                Layout.fillWidth: true
+                                text: "Speed envelope soft band"
+                            }
+                            DoubleSpinBox {
+                                id: tractionEnvelopeBandBox
+                                Layout.preferredWidth: 145
+                                decimals: 0
+                                realFrom: 1.0
+                                realTo: 3000.0
+                                realStepSize: 25.0
+                                realValue: tractionEnvelopeSoftBandErpm
+                                suffix: " ERPM"
+                                onRealValueChanged: tractionEnvelopeSoftBandErpm = realValue
+                            }
+                        }
+
+                        RowLayout {
+                            Layout.fillWidth: true
+
+                            Button {
+                                text: "Apply and save"
+                                Layout.fillWidth: true
+                                onClicked: {
+                                    mCommands.lispSetTractionControlConfig(
+                                                tractionControlEnabled,
+                                                accelerationLimitEnabled,
+                                                tractionMaxAccelMs2,
+                                                tractionAccelSoftBandMs2,
+                                                tractionSlipThresholdErpm,
+                                                tractionPenaltyFactor,
+                                                tractionRecoveryRate,
+                                                tractionEnvelopeSoftBandErpm)
+                                    tractionConfigStatus = "Sent to LispBM; reading back..."
+                                    tractionConfigRefreshTimer.restart()
+                                }
+                            }
+
+                            Button {
+                                text: "Defaults"
+                                onClicked: {
+                                    tractionControlEnabled = true
+                                    accelerationLimitEnabled = true
+                                    tractionMaxAccelMs2 = 1.5
+                                    tractionAccelSoftBandMs2 = 0.5
+                                    tractionSlipThresholdErpm = 400.0
+                                    tractionPenaltyFactor = 0.1
+                                    tractionRecoveryRate = 0.02
+                                    tractionEnvelopeSoftBandErpm = 200.0
+                                    tractionConfigStatus = "Defaults selected; press Apply and save"
+                                }
+                            }
+                        }
+
+                        Label {
+                            Layout.fillWidth: true
+                            text: tractionConfigStatus
+                            color: "#80cbc4"
+                            wrapMode: Text.WordWrap
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -868,6 +1137,8 @@ Item {
             if (stats.done_ctx_r !== undefined) {
                 lispDoneCtxR = stats.done_ctx_r
             }
+
+            updateTractionConfigFromGlobals(stats.globals)
 
             bindingModel.clear()
 

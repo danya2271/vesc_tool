@@ -2267,6 +2267,28 @@ void Commands::lispSendReplCmd(QString str)
     emitData(vb);
 }
 
+void Commands::lispSetTractionControlConfig(bool enabled,
+                                             bool accelerationLimitEnabled,
+                                             double maxAccelMs2,
+                                             double accelSoftBandMs2,
+                                             double slipThresholdErpm,
+                                             double penaltyFactor,
+                                             double recoveryRate,
+                                             double envelopeSoftBandErpm)
+{
+    const QString command = QString("(tc-set-config %1 %2 %3 %4 %5 %6 %7 %8)")
+            .arg(enabled ? 1 : 0)
+            .arg(accelerationLimitEnabled ? 1 : 0)
+            .arg(maxAccelMs2, 0, 'f', 4)
+            .arg(accelSoftBandMs2, 0, 'f', 4)
+            .arg(slipThresholdErpm, 0, 'f', 3)
+            .arg(penaltyFactor, 0, 'f', 4)
+            .arg(recoveryRate, 0, 'f', 4)
+            .arg(envelopeSoftBandErpm, 0, 'f', 3);
+
+    lispSendReplCmd(command);
+}
+
 void Commands::setBleName(QString name)
 {
     VByteArray vb;

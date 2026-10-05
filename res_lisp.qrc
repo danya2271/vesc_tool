@@ -1,5 +1,6 @@
 <RCC>
     <qresource prefix="/">
+        <file>res/LispBM/Presets/smart_throttle_traction_control.lbm</file>
         <file>res/LispBM/Examples/can_pos_follow.lbm</file>
         <file>res/LispBM/Examples/control_servo_from_duty.lbm</file>
         <file>res/LispBM/Examples/control_servo_from_encoder.lbm</file>

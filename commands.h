@@ -287,6 +287,14 @@ public slots:
     void lispSetRunning(bool running);
     void lispGetStats(bool all);
     void lispSendReplCmd(QString str);
+    Q_INVOKABLE void lispSetTractionControlConfig(bool enabled,
+                                                  bool accelerationLimitEnabled,
+                                                  double maxAccelMs2,
+                                                  double accelSoftBandMs2,
+                                                  double slipThresholdErpm,
+                                                  double penaltyFactor,
+                                                  double recoveryRate,
+                                                  double envelopeSoftBandErpm);
 
     void setBleName(QString name);
     void setBlePin(QString pin);

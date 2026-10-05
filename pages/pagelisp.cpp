@@ -111,13 +111,17 @@ PageLisp::PageLisp(QWidget *parent) :
     ui->fileTabs->setCurrentIndex(0);
     updateRecentList();
 
-    // Load examples
-    foreach (auto &fi, QDir("://res/LispBM/Examples/").entryInfoList(QDir::NoFilter, QDir::Name)) {
-        QListWidgetItem *item = new QListWidgetItem;
-        item->setText(fi.fileName());
-        item->setData(Qt::UserRole, fi.filePath());
-        ui->exampleList->addItem(item);
-    }
+    auto addLispFiles = [this](const QString &path, const QString &prefix) {
+        foreach (auto &fi, QDir(path).entryInfoList(QDir::Files, QDir::Name)) {
+            QListWidgetItem *item = new QListWidgetItem;
+            item->setText(prefix + fi.fileName());
+            item->setData(Qt::UserRole, fi.filePath());
+            ui->exampleList->addItem(item);
+        }
+    };
+
+    addLispFiles("://res/LispBM/Presets/", "[Preset] ");
+    addLispFiles("://res/LispBM/Examples/", "");
 
     ui->splitter->setSizes(QList<int>({1000, 100}));
     ui->splitter_2->setSizes(QList<int>({1000, 600}));
