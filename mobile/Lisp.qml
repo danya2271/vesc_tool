@@ -35,6 +35,7 @@ Item {
     property real tractionRecoveryRate: 0.02
     property real tractionEnvelopeSoftBandErpm: 200.0
     property string tractionConfigStatus: "Load the traction preset first"
+    property string tractionControllerState: "Controller state: unknown"
     property bool tractionConfigPending: false
     property bool tractionConfigReadPending: false
     property string tractionSaveResult: ""
@@ -80,6 +81,8 @@ Item {
             tractionPenaltyFactor = values[5]
             tractionRecoveryRate = values[6]
             tractionEnvelopeSoftBandErpm = values[7]
+            tractionControllerState = "Controller: TC " + (values[0] !== 0 ? "ON" : "OFF") +
+                                     "; acceleration limit " + (values[1] !== 0 ? "ON" : "OFF")
             tractionConfigStatus = tractionSaveResult.length > 0 ? tractionSaveResult :
                                    (tractionConfigPending ? "Applied; EEPROM save not confirmed" : "Read from LispBM")
             tractionConfigPending = false
@@ -966,6 +969,12 @@ Item {
                             color: "#bdbdbd"
                         }
 
+                        Label {
+                            Layout.fillWidth: true
+                            text: tractionControllerState
+                            color: "#80cbc4"
+                        }
+
                         CheckBox {
                             id: tractionEnabledBox
                             text: "Enable traction control"
@@ -1024,7 +1033,7 @@ Item {
                             Layout.fillWidth: true
                             Label {
                                 Layout.fillWidth: true
-                                text: "Slip threshold"
+                                text: "TC intervention threshold"
                             }
                             DoubleSpinBox {
                                 id: tractionSlipThresholdBox
@@ -1082,7 +1091,7 @@ Item {
                             Layout.fillWidth: true
                             Label {
                                 Layout.fillWidth: true
-                                text: "Speed envelope soft band"
+                                text: "TC reduction band"
                             }
                             DoubleSpinBox {
                                 id: tractionEnvelopeBandBox

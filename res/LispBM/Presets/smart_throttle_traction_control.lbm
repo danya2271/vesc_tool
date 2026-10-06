@@ -28,11 +28,12 @@
 (define ramp-fast 0.01)
 (define ramp-erpm-max 4200.0)
 (define ramp-neg 0.32)
-(define loop-time 0.005)
+(define loop-time 0.0005)
 (define control-dt loop-time)
 (define control-last-time (systime))
 (define accel-ceiling-reduce-time 0.12)
-(define accel-ceiling-recover-time 0.35)
+(define accel-ceiling-recover-time 0.12)
+(define traction-reduce-time 0.03)
 
 (define v-min 41.7)
 (define v-cutoff 36.5)
@@ -96,6 +97,9 @@
 (define vt-accel 0.0)
 (define vt-armed 0)
 (define vt-limit-current boost-current)
+(define vt-tc-on traction-control-enabled)
+(define vt-al-on acceleration-limit-enabled)
+(define vt-tc-cut 1.0)
 
 ;; ====== 5. HELPERS AND EEPROM CONFIGURATION ======
 (defun clamp (value low high)
@@ -186,6 +190,14 @@
         (setvar 'penalty-factor (clamp penalty 0.01 1.0))
         (setvar 'recovery-rate (clamp recovery 0.001 1.0))
         (setvar 'envelope-soft-band-erpm (clamp envelope-band 1.0 3000.0))
+        (setvar 'accel-current-ceiling boost-current)
+        (setvar 'allowed-erpm speed-filtered-erpm)
+        (setvar 'traction-cut 1.0)
+        (setvar 'fast-current-cut 0)
+        (setvar 'vt-tc-on traction-control-enabled)
+        (setvar 'vt-al-on acceleration-limit-enabled)
+        (setvar 'vt-tc-cut 1.0)
+        (setvar 'vt-limit-current boost-current)
         (if (tc-vehicle-stopped)
             (progn
                 (setvar 'tc-saving 1)
@@ -292,44 +304,42 @@
                 (setvar 'motion-sample-elapsed elapsed)))))
 
 (defun update-accel-ceiling (requested minimum-current linear-throttle)
-    (if (= acceleration-limit-enabled 0)
+    (if (or (= acceleration-limit-enabled 0)
+            (= throttle-armed 0)
+            (= tc-saving 1)
+            (< linear-throttle 0.05)
+            (<= requested 0.0))
         (setvar 'accel-current-ceiling boost-current)
-        (if (and (= motion-updated 1)
-                 (= throttle-armed 1)
-                 (= tc-saving 0)
-                 (>= linear-throttle 0.05)
-                 (> requested 0.0))
+        (if (= motion-updated 1)
             (let ((lower-accel (max-value (* max-accel-ms2 0.5)
                                          (- max-accel-ms2 accel-soft-band-ms2)))
                   (feedback-current (max-value current-out minimum-current)))
-                (let ((accel-error
-                       (if (> measured-accel-ms2 max-accel-ms2)
-                           (- max-accel-ms2 measured-accel-ms2)
-                           (if (< measured-accel-ms2 lower-accel)
-                               (- lower-accel measured-accel-ms2)
-                               0.0))))
-                    (progn
-                        (setvar 'accel-current-ceiling
-                                (clamp accel-current-ceiling minimum-current
-                                       (if (< accel-error 0.0)
-                                           (min-value requested feedback-current)
-                                           requested)))
-                        (if (or (< accel-error 0.0)
-                                (and (> accel-error 0.0)
-                                     (>= current-out (* accel-current-ceiling 0.9))))
-                            (let ((response-time
-                                   (if (< accel-error 0.0)
-                                       accel-ceiling-reduce-time
-                                       accel-ceiling-recover-time)))
-                                (let ((correction
-                                       (* (/ motion-sample-dt response-time)
-                                          (* feedback-current
-                                             (/ accel-error
-                                                (max-value (abs measured-accel-ms2)
-                                                           max-accel-ms2))))))
-                                    (setvar 'accel-current-ceiling
-                                            (clamp (+ accel-current-ceiling correction)
-                                                   minimum-current requested)))))))))))
+                (if (> measured-accel-ms2 max-accel-ms2)
+                    (let ((baseline (min-value accel-current-ceiling feedback-current)))
+                        (let ((correction
+                               (* baseline
+                                  (* (clamp (/ motion-sample-dt accel-ceiling-reduce-time) 0.0 1.0)
+                                     (/ (- measured-accel-ms2 max-accel-ms2)
+                                        measured-accel-ms2)))))
+                            (setvar 'accel-current-ceiling
+                                    (clamp (- baseline correction) minimum-current boost-current))))
+                    (if (and (< measured-accel-ms2 lower-accel)
+                             (>= current-out (* (min-value requested accel-current-ceiling) 0.9)))
+                        (let ((correction
+                               (* (max-value feedback-current (* boost-current 0.05))
+                                  (* (clamp (/ motion-sample-dt accel-ceiling-recover-time) 0.0 1.0)
+                                     (clamp (/ (- lower-accel measured-accel-ms2) max-accel-ms2)
+                                            0.0 1.0)))))
+                            (setvar 'accel-current-ceiling
+                                    (clamp (+ accel-current-ceiling correction)
+                                           minimum-current boost-current)))))))))
+
+(defun get-traction-target (excess)
+    (let ((progress (clamp (/ (- excess slip-threshold-erpm)
+                             envelope-soft-band-erpm) 0.0 2.0)))
+        (if (<= progress 1.0)
+            (- 1.0 (* progress (- 1.0 penalty-factor)))
+            (* penalty-factor (- 2.0 progress)))))
 
 (defun get-traction-multiplier (erpm linear-throttle)
     (if (= traction-control-enabled 0)
@@ -342,32 +352,22 @@
                 (setvar 'allowed-erpm speed-filtered-erpm)
                 (setvar 'traction-cut 1.0)
                 1.0)
-            (let ((max-step (get-max-erpm-step control-dt)))
-                (progn
-                    (let ((next-allowed (+ allowed-erpm max-step)))
-                        (if (> speed-filtered-erpm next-allowed)
-                            (setvar 'allowed-erpm next-allowed)
-                            (setvar 'allowed-erpm speed-filtered-erpm)))
-
-                    (let ((envelope-excess (- speed-filtered-erpm allowed-erpm)))
-                        (progn
-                            (if (> envelope-excess slip-threshold-erpm)
-                                (setvar 'traction-cut penalty-factor)
+            (progn
+                (if (= motion-updated 1)
+                    (progn
+                        (setvar 'allowed-erpm
+                                (min-value speed-filtered-erpm
+                                           (+ allowed-erpm (get-max-erpm-step motion-sample-dt))))
+                        (let ((target (get-traction-target (- speed-filtered-erpm allowed-erpm))))
+                            (let ((response
+                                   (if (< target traction-cut)
+                                       (clamp (/ motion-sample-dt traction-reduce-time) 0.0 1.0)
+                                       (clamp (* recovery-rate (/ motion-sample-dt motion-sample-time))
+                                              0.0 1.0))))
                                 (setvar 'traction-cut
-                                        (+ traction-cut
-                                           (* (- 1.0 traction-cut)
-                                              (clamp (* recovery-rate (/ control-dt motion-sample-time)) 0.0 1.0)))))
-
-                            (let ((envelope-multiplier
-                                   (if (<= envelope-excess 0.0)
-                                       1.0
-                                       (if (>= envelope-excess envelope-soft-band-erpm)
-                                           0.0
-                                           (- 1.0
-                                              (/ envelope-excess envelope-soft-band-erpm))))))
-                                (if (< traction-cut envelope-multiplier)
-                                    traction-cut
-                                    envelope-multiplier)))))))))
+                                        (clamp (+ traction-cut (* (- target traction-cut) response))
+                                               0.0 1.0))))))
+                traction-cut))))
 
 (defun get-governed-current (requested erpm linear-throttle)
     (let ((minimum-current (clamp idle-current 0.0 requested)))
@@ -389,8 +389,10 @@
             (progn
                 (if (< (map-voltage raw-v) 0.05)
                     (setvar 'throttle-armed 1))
-                (setvar 'adc-filtered
-                        (+ (* adc-alpha raw-v) (* (- 1.0 adc-alpha) adc-filtered)))
+                (let ((filter-alpha
+                       (/ control-dt (+ control-dt (* loop-time (- (/ 1.0 adc-alpha) 1.0))))))
+                    (setvar 'adc-filtered
+                            (+ (* filter-alpha raw-v) (* (- 1.0 filter-alpha) adc-filtered))))
 
                 (let ((erpm (if (< raw-rpm 0) (* raw-rpm -1.0) raw-rpm))
                       (linear-throttle (map-voltage adc-filtered)))
@@ -444,6 +446,9 @@
                                                         (setvar 'vt-erpm erpm)
                                                         (setvar 'vt-accel measured-accel-ms2)
                                                         (setvar 'vt-armed throttle-armed)
+                                                        (setvar 'vt-tc-on traction-control-enabled)
+                                                        (setvar 'vt-al-on acceleration-limit-enabled)
+                                                        (setvar 'vt-tc-cut traction-cut)
                                                         (setvar 'vt-limit-current accel-current-ceiling)))))))))))))))
 
 (tc-load-config)

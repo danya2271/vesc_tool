@@ -26,8 +26,11 @@ size-limited global-variable statistics packet:
 ```
 
 Arguments are traction enabled, acceleration governor enabled, maximum
-acceleration, acceleration recovery band, slip threshold in ERPM, penalty factor,
-recovery rate, and speed-envelope soft band in ERPM.
+acceleration, acceleration recovery band, TC intervention threshold in ERPM,
+penalty factor, recovery rate, and TC reduction band in ERPM. The intervention
+threshold is the point where TC starts reducing the requested current. The
+configured reduction band brings the TC target toward the penalty factor; a
+second equal band can then bring it down to zero for a severe ERPM runaway.
 
 **Apply and save** updates RAM immediately. EEPROM is written only when motor
 speed and current are near zero and the throttle is released. The application
@@ -39,13 +42,12 @@ marker so the preset can fall back to defaults on restart.
 ## Smooth limiting and preload
 
 The acceleration governor maintains a current ceiling instead of multiplying
-the full throttle request by a factor that switches between 0 and 1. It lowers
-this ceiling on new acceleration samples, holds it in a recovery deadband, and
-raises it gradually when acceleration falls below that band. Recovery is
-inhibited while another limit holds actual commanded current below the ceiling.
-The recovery band extends below the configured maximum acceleration, and is
-capped at half that maximum. Disabling traction control does not disable this
-independent acceleration governor.
+the full throttle request by a factor that switches between 0 and 1. It leaves
+the original throttle/ramp response untouched until measured acceleration
+exceeds the configured maximum, then lowers the ceiling on new samples and
+recovers it quickly after acceleration returns to normal. Disabling traction
+control does not disable this independent acceleration governor; disabling the
+acceleration governor resets its ceiling immediately.
 
 With the throttle pressed, both governors preserve the configured `idle-current`
 preload (default **1 A**), but never request more than the throttle/battery-limited
@@ -64,14 +66,15 @@ in the script if positive preload is not wanted; safety cutoffs are unaffected.
 Auto Poll defaults to compact `vt-*` telemetry: raw throttle voltage (`vt-adc`),
 commanded current (`vt-current`), motor ERPM (`vt-erpm`), filtered acceleration
 (`vt-accel`), startup interlock (`vt-armed`, 1 after throttle release), and the
-persistent acceleration current ceiling (`vt-limit-current`).
+persistent acceleration current ceiling (`vt-limit-current`). It also exposes
+`vt-tc-on`, `vt-al-on`, and the smoothed TC multiplier (`vt-tc-cut`) so the
+controller state can be verified independently of the Android checkboxes.
 **All globals** also requests configuration and internal variables, but firmware
 may truncate this list. Configuration readback does not depend on that list.
 
-The current loop sleeps for 5 ms between iterations, and uses elapsed wall-clock
-time for ramping and acceleration estimation. Acceleration feedback is updated
-on motion samples rather than every current-loop iteration. Repeated
-field-weakening configuration updates are rate-limited.
+The current loop uses the original 0.5 ms period and ramp response. Acceleration
+feedback is updated on motion samples rather than every current-loop iteration.
+Repeated field-weakening configuration updates are rate-limited.
 Battery cutoff inhibits both drive current and field weakening.
 
 Motor ERPM alone cannot establish actual vehicle acceleration or true wheel
