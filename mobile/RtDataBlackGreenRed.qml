@@ -80,6 +80,109 @@ Item {
     property real currentMotor: 0.0
     property real currentIn: 0.0
     property real dutyNow: 0.0
+    property real throttlePercent: 0.0
+    property bool throttleAvailable: false
+    property real throttleLastUpdate: 0.0
+
+    onUpdateDataChanged: resetThrottle()
+    onVisibleChanged: {
+        if (!visible) resetThrottle();
+    }
+
+    function resetThrottle() {
+        throttlePercent = 0.0;
+        throttleAvailable = false;
+        throttleLastUpdate = 0.0;
+    }
+
+    function updateThrottle(stats) {
+        if (!updateData || !visible || !VescIf.isPortConnected()) return;
+        if (stats.globals) {
+            for (var index = 0; index < stats.globals.length; index++) {
+                var entry = stats.globals[index];
+                if (entry.name === "vt-throttle" && typeof entry.value === "number" && isFinite(entry.value)) {
+                    throttlePercent = Math.max(0.0, Math.min(100.0, entry.value));
+                    throttleAvailable = true;
+                    throttleLastUpdate = Date.now();
+                    return;
+                }
+            }
+        }
+        resetThrottle();
+    }
+
+    Timer {
+        id: throttlePollTimer
+        interval: 100
+        repeat: true
+        running: rtBlackGreenRedRoot.updateData && rtBlackGreenRedRoot.visible
+        onTriggered: {
+            if (!VescIf.isPortConnected()) {
+                resetThrottle();
+                return;
+            }
+            if (throttleAvailable && Date.now() - throttleLastUpdate > 1000) resetThrottle();
+            mCommands.lispGetStats(false);
+        }
+    }
+
+    Connections {
+        target: VescIf
+        function onPortConnectedChanged() {
+            resetThrottle();
+        }
+    }
+
+    Component {
+        id: throttleIndicatorComponent
+
+        Rectangle {
+            implicitHeight: 64
+            color: colCardBg
+            border.color: colCardBorder
+            border.width: 1
+            radius: 8
+
+            ColumnLayout {
+                anchors.fill: parent
+                anchors.margins: 10
+                spacing: 6
+
+                RowLayout {
+                    Layout.fillWidth: true
+                    Text {
+                        text: "THROTTLE"
+                        font.pixelSize: 10
+                        font.bold: true
+                        color: colTextDim
+                    }
+                    Item { Layout.fillWidth: true }
+                    Text {
+                        objectName: "throttlePercentText"
+                        text: throttleAvailable ? Math.round(throttlePercent) + "%" : "—"
+                        font.pixelSize: 18
+                        font.bold: true
+                        color: throttleAvailable ? colNeonGreen : colTextDim
+                    }
+                }
+
+                Rectangle {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 8
+                    radius: 4
+                    color: "#102315"
+
+                    Rectangle {
+                        objectName: "throttleFill"
+                        width: parent.width * (throttleAvailable ? throttlePercent / 100.0 : 0.0)
+                        height: parent.height
+                        radius: 4
+                        color: colNeonGreen
+                    }
+                }
+            }
+        }
+    }
 
     // Temperature Sensors & Limits
     property real tempMos: 0.0
@@ -861,6 +964,12 @@ Item {
                         }
                     }
 
+                    Loader {
+                        Layout.fillWidth: true
+                        Layout.preferredHeight: 64
+                        sourceComponent: throttleIndicatorComponent
+                    }
+
                     // Temperatures & Distance Card
                     Rectangle {
                         Layout.fillWidth: true
@@ -1121,6 +1230,12 @@ Item {
                             Text { text: "CURRENT: " + currentMotor.toFixed(1) + " A"; font.pixelSize: 12; color: colTextWhite }
                         }
                     }
+                }
+
+                Loader {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 64
+                    sourceComponent: throttleIndicatorComponent
                 }
 
                 // Minimal Battery Card
@@ -1541,6 +1656,12 @@ Item {
                             }
                         }
                     }
+                }
+
+                Loader {
+                    Layout.fillWidth: true
+                    Layout.preferredHeight: 64
+                    sourceComponent: throttleIndicatorComponent
                 }
 
                 // Temperatures Card
@@ -2047,6 +2168,10 @@ Item {
         id: commandsUpdate
         target: mCommands
         enabled: updateData
+
+        function onLispStatsRxMap(stats) {
+            updateThrottle(stats);
+        }
 
         function onValuesSetupReceived(values, mask) {
             voltageIn = values.v_in > 0.5 ? Math.max(0.0, values.v_in + voltageOffset) : 0.0;

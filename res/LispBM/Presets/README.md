@@ -64,6 +64,8 @@ in the script if positive preload is not wanted; safety cutoffs are unaffected.
 ## Diagnostics and limitations
 
 Auto Poll defaults to compact `vt-*` telemetry: raw throttle voltage (`vt-adc`),
+filtered throttle opening in percent (`vt-throttle`, before throttle expo and
+current limiting),
 commanded current (`vt-current`), motor ERPM (`vt-erpm`), filtered acceleration
 (`vt-accel`), startup interlock (`vt-armed`, 1 after throttle release), and the
 persistent acceleration current ceiling (`vt-limit-current`). It also exposes
@@ -71,6 +73,14 @@ persistent acceleration current ceiling (`vt-limit-current`). It also exposes
 controller state can be verified independently of the Android checkboxes.
 **All globals** also requests configuration and internal variables, but firmware
 may truncate this list. Configuration readback does not depend on that list.
+
+The custom Black-Green-Red HUD displays throttle opening as a percentage and a
+bar in full, minimal, and landscape views. While the HUD is active, it polls
+compact LispBM statistics at 10 Hz independently of the LispBM tab. Upload and
+run the updated preset to enable this indicator. Missing or stale telemetry,
+or a disconnected controller, displays `—` rather than an old percentage.
+This indicates throttle position, not motor current, duty cycle, or the amount
+of power left after traction/acceleration limiting.
 
 The current loop uses the original 0.5 ms period and ramp response. Acceleration
 feedback is updated on motion samples rather than every current-loop iteration.
