@@ -1654,6 +1654,80 @@ void Utility::stopGnssForegroundService()
 #endif
 }
 
+bool Utility::canDrawOverlays()
+{
+#ifdef Q_OS_ANDROID
+    return QAndroidJniObject::callStaticMethod<jboolean>("com/vedder/vesc/Utils",
+                                                         "canDrawOverlays",
+                                                         "(Landroid/content/Context;)Z",
+                                                         QtAndroid::androidActivity().object());
+#else
+    return true;
+#endif
+}
+
+void Utility::requestDrawOverlaysPermission()
+{
+#ifdef Q_OS_ANDROID
+    QAndroidJniObject::callStaticMethod<void>("com/vedder/vesc/Utils",
+                                              "requestDrawOverlaysPermission",
+                                              "(Landroid/content/Context;)V",
+                                              QtAndroid::androidActivity().object());
+#endif
+}
+
+void Utility::showFloatingWindow(const QString &speed, const QString &power, const QString &voltage)
+{
+#ifdef Q_OS_ANDROID
+    QAndroidJniObject speedObj = QAndroidJniObject::fromString(speed);
+    QAndroidJniObject powerObj = QAndroidJniObject::fromString(power);
+    QAndroidJniObject voltageObj = QAndroidJniObject::fromString(voltage);
+
+    QAndroidJniObject::callStaticMethod<void>("com/vedder/vesc/Utils",
+                                              "showFloatingWindow",
+                                              "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+                                              QtAndroid::androidActivity().object(),
+                                              speedObj.object<jstring>(),
+                                              powerObj.object<jstring>(),
+                                              voltageObj.object<jstring>());
+#else
+    Q_UNUSED(speed)
+    Q_UNUSED(power)
+    Q_UNUSED(voltage)
+#endif
+}
+
+void Utility::updateFloatingWindow(const QString &speed, const QString &power, const QString &voltage)
+{
+#ifdef Q_OS_ANDROID
+    QAndroidJniObject speedObj = QAndroidJniObject::fromString(speed);
+    QAndroidJniObject powerObj = QAndroidJniObject::fromString(power);
+    QAndroidJniObject voltageObj = QAndroidJniObject::fromString(voltage);
+
+    QAndroidJniObject::callStaticMethod<void>("com/vedder/vesc/Utils",
+                                              "updateFloatingWindow",
+                                              "(Landroid/content/Context;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;)V",
+                                              QtAndroid::androidActivity().object(),
+                                              speedObj.object<jstring>(),
+                                              powerObj.object<jstring>(),
+                                              voltageObj.object<jstring>());
+#else
+    Q_UNUSED(speed)
+    Q_UNUSED(power)
+    Q_UNUSED(voltage)
+#endif
+}
+
+void Utility::hideFloatingWindow()
+{
+#ifdef Q_OS_ANDROID
+    QAndroidJniObject::callStaticMethod<void>("com/vedder/vesc/Utils",
+                                              "hideFloatingWindow",
+                                              "(Landroid/content/Context;)V",
+                                              QtAndroid::androidActivity().object());
+#endif
+}
+
 bool Utility::isBleScanEnabled()
 {
 #ifdef Q_OS_ANDROID

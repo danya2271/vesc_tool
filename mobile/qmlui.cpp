@@ -91,6 +91,13 @@ void QmlUi::setVisible(bool visible)
     }
 }
 
+void QmlUi::setFloatingWindowVisible(bool visible)
+{
+    if (mVesc) {
+        mVesc->setFloatingWindowVisible(visible);
+    }
+}
+
 void QmlUi::startCustomGui(VescInterface *vesc, QString qmlFile, int width, int height)
 {
     if (mEngine) {

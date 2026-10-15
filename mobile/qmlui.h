@@ -34,6 +34,7 @@ public:
     bool startQmlUi();
     bool eventFilter(QObject *object, QEvent *e);
     void setVisible(bool visible);
+    void setFloatingWindowVisible(bool visible);
 
     void startCustomGui(VescInterface *vesc, QString qmlFile = "qrc:/res/qml/MainLoader.qml",
                         int width = -1, int height = -1);

@@ -26,6 +26,7 @@ import android.provider.Settings;
 import android.os.Build;
 import android.text.TextUtils;
 import android.provider.Settings.SettingNotFoundException;
+import android.net.Uri;
 import android.location.LocationManager;
 import android.view.WindowInsets;
 import android.app.Activity;
@@ -47,6 +48,31 @@ public class Utils
     public static void stopVForegroundService(Context ctx) {
         Intent intent = new Intent(ctx, VForegroundService.class);
         ctx.stopService(intent);
+    }
+
+    public static boolean canDrawOverlays(Context ctx) {
+        return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(ctx);
+    }
+
+    public static void requestDrawOverlaysPermission(Context ctx) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M && !canDrawOverlays(ctx)) {
+            Intent intent = new Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                    Uri.parse("package:" + ctx.getPackageName()));
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(intent);
+        }
+    }
+
+    public static void showFloatingWindow(Context ctx, String speed, String power, String voltage) {
+        VFloatingWindow.show(ctx, speed, power, voltage);
+    }
+
+    public static void updateFloatingWindow(Context ctx, String speed, String power, String voltage) {
+        VFloatingWindow.update(ctx, speed, power, voltage);
+    }
+
+    public static void hideFloatingWindow(Context ctx) {
+        VFloatingWindow.hide(ctx);
     }
 
     public static boolean checkLocationEnabled(Context ctx) {

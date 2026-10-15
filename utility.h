@@ -72,6 +72,11 @@ public:
     Q_INVOKABLE static void keepScreenOn(bool on);
     Q_INVOKABLE static void setScreenRotation(int rotation);
     Q_INVOKABLE static void allowScreenRotation(bool enabled);
+    Q_INVOKABLE static bool canDrawOverlays();
+    Q_INVOKABLE static void requestDrawOverlaysPermission();
+    static void showFloatingWindow(const QString &speed, const QString &power, const QString &voltage);
+    static void updateFloatingWindow(const QString &speed, const QString &power, const QString &voltage);
+    static void hideFloatingWindow();
     Q_INVOKABLE static bool waitSignal(QObject *sender, QString signal, int timeoutMs);
     Q_INVOKABLE static void sleepWithEventLoop(int timeMs);
     Q_INVOKABLE static bool canUpdateBaudAllBlocking(VescInterface *vesc, int newBaud);

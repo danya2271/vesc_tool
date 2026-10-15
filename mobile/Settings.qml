@@ -80,6 +80,21 @@ Item {
                     enabled: Qt.platform.os !== "ios"
                 }
 
+                CheckBox {
+                    id: floatingWindowBox
+                    Layout.fillWidth: true
+                    text: "Show floating telemetry window when minimized"
+                    checked: VescIf.showFloatingWindow()
+                    visible: Qt.platform.os === "android"
+                    enabled: visible
+
+                    onClicked: {
+                        if (checked && !Utility.canDrawOverlays()) {
+                            Utility.requestDrawOverlaysPermission()
+                        }
+                    }
+                }
+
                 RowLayout {
                     id: screenRotBox
                     Layout.fillWidth: true
@@ -148,6 +163,7 @@ Item {
             imperialBox.checked = VescIf.useImperialUnits()
             negativeSpeedBox.checked = VescIf.speedGaugeUseNegativeValues()
             screenOnBox.checked = VescIf.keepScreenOn()
+            floatingWindowBox.checked = VescIf.showFloatingWindow()
             screenRotCombo.currentIndex = Math.max(0, Math.min(3, VescIf.getScreenRotation() / 90))
             qmlUiBox.checked = VescIf.getLoadQmlUiOnConnect()
             qmlUiAskBox.checked = VescIf.askQmlLoad()
@@ -160,6 +176,7 @@ Item {
             VescIf.setUseImperialUnits(imperialBox.checked)
             VescIf.setSpeedGaugeUseNegativeValues(negativeSpeedBox.checked)
             VescIf.setKeepScreenOn(screenOnBox.checked)
+            VescIf.setShowFloatingWindow(floatingWindowBox.checked)
             VescIf.setScreenRotation(screenRotCombo.currentIndex * 90)
             VescIf.setLoadQmlUiOnConnect(qmlUiBox.checked)
             VescIf.setAskQmlLoad(qmlUiAskBox.checked)

@@ -360,6 +360,15 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     }
     mSpeedGaugeUseNegativeValues =  mSettings.value("speedGaugeUseNegativeValues", true).toBool();
     mAskQmlLoad =  mSettings.value("askQmlLoad", true).toBool();
+    mShowFloatingWindow = mSettings.value("showFloatingWindow", false).toBool();
+    mFloatingWindowVisible = false;
+    mFloatingPollTimer = new QTimer(this);
+    mFloatingPollTimer->setInterval(100);
+    connect(mFloatingPollTimer, &QTimer::timeout, [this]() {
+        if (mFloatingWindowVisible && mShowFloatingWindow && isPortConnected()) {
+            mCommands->getValuesSetup();
+        }
+    });
 
     mCommands->setAppConfig(mAppConfig);
     mCommands->setMcConfig(mMcConfig);
@@ -421,6 +430,9 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     connect(mCommands, &Commands::valuesSetupReceived, [this](SETUP_VALUES v) {
         mLastSetupValues = v;
         mLastSetupTime = QDateTime::currentDateTimeUtc();
+        if (mFloatingWindowVisible && mShowFloatingWindow) {
+            updateFloatingWindowValues();
+        }
     });
 
     connect(mCommands, &Commands::valuesImuReceived, [this](IMU_VALUES v) {
@@ -561,6 +573,10 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
         }
     });
 
+    connect(this, &VescInterface::portConnectedChanged, [this]() {
+        refreshFloatingWindow();
+    });
+
     mDeserialFailedMessageShown = false;
     connect(mCommands, &Commands::deserializeConfigFailed, [this](bool isMc, bool isApp) {
         if (mSuppressConfigErrors || mReconnectGraceActive) {
@@ -632,6 +648,7 @@ VescInterface::~VescInterface()
         setWakeLock(false);
     }
 
+    Utility::hideFloatingWindow();
     Utility::stopGnssForegroundService();
 }
 
@@ -825,6 +842,7 @@ void VescInterface::storeSettings()
     mSettings.setValue("screenRotation", mScreenRotation);
     mSettings.setValue("speedGaugeUseNegativeValues", mSpeedGaugeUseNegativeValues);
     mSettings.setValue("askQmlLoad", mAskQmlLoad);
+    mSettings.setValue("showFloatingWindow", mShowFloatingWindow);
     mSettings.sync();
 }
 
@@ -2181,6 +2199,56 @@ bool VescInterface::askQmlLoad() const
 void VescInterface::setAskQmlLoad(bool newAskQmlLoad)
 {
     mAskQmlLoad = newAskQmlLoad;
+}
+
+bool VescInterface::showFloatingWindow() const
+{
+    return mShowFloatingWindow;
+}
+
+void VescInterface::setShowFloatingWindow(bool show)
+{
+    mShowFloatingWindow = show;
+    refreshFloatingWindow();
+}
+
+void VescInterface::setFloatingWindowVisible(bool visible)
+{
+    mFloatingWindowVisible = visible;
+    refreshFloatingWindow();
+}
+
+void VescInterface::refreshFloatingWindow()
+{
+    const bool shouldShow = mFloatingWindowVisible && mShowFloatingWindow &&
+            isPortConnected() && Utility::canDrawOverlays();
+
+    if (shouldShow) {
+        mFloatingPollTimer->start();
+        const double speed = mSpeedGaugeUseNegativeValues ? mLastSetupValues.speed * 3.6 :
+                                                             std::fabs(mLastSetupValues.speed * 3.6);
+        const double speedFactor = mUseImperialUnits ? 0.621371192 : 1.0;
+        const QString speedUnit = mUseImperialUnits ? "mph" : "km/h";
+        Utility::showFloatingWindow(QString("%1 %2").arg(speed * speedFactor, 0, 'f', 1).arg(speedUnit),
+                                    QString("%1 W").arg(mLastSetupValues.current_in * mLastSetupValues.v_in, 0, 'f', 0),
+                                    QString("%1 V").arg(mLastSetupValues.v_in, 0, 'f', 1));
+    } else {
+        mFloatingPollTimer->stop();
+        Utility::hideFloatingWindow();
+    }
+}
+
+void VescInterface::updateFloatingWindowValues()
+{
+    const double speed = mSpeedGaugeUseNegativeValues ? mLastSetupValues.speed * 3.6 :
+                                                         std::fabs(mLastSetupValues.speed * 3.6);
+    const double speedFactor = mUseImperialUnits ? 0.621371192 : 1.0;
+    const QString speedUnit = mUseImperialUnits ? "mph" : "km/h";
+    const QString speedText = QString("%1 %2").arg(speed * speedFactor, 0, 'f', 1).arg(speedUnit);
+    const QString powerText = QString("%1 W").arg(mLastSetupValues.current_in * mLastSetupValues.v_in, 0, 'f', 0);
+    const QString voltageText = QString("%1 V").arg(mLastSetupValues.v_in, 0, 'f', 1);
+
+    Utility::updateFloatingWindow(speedText, powerText, voltageText);
 }
 
 #ifdef HAS_SERIALPORT

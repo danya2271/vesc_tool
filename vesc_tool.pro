@@ -333,6 +333,7 @@ DISTFILES += \
     android/build.gradle \
     android/gradle/wrapper/gradle-wrapper.properties \
     android/src/com/vedder/vesc/VForegroundService.java \
+    android/src/com/vedder/vesc/VFloatingWindow.java \
     android/src/com/vedder/vesc/Utils.java
 
 ANDROID_PACKAGE_SOURCE_DIR = $$PWD/android

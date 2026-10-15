@@ -167,6 +167,9 @@ public:
     Q_INVOKABLE void setSpeedGaugeUseNegativeValues(bool useNegativeValues);
     Q_INVOKABLE bool askQmlLoad() const;
     Q_INVOKABLE void setAskQmlLoad(bool newAskQmlLoad);
+    Q_INVOKABLE bool showFloatingWindow() const;
+    Q_INVOKABLE void setShowFloatingWindow(bool show);
+    void setFloatingWindowVisible(bool visible);
 
 #ifdef HAS_BLUETOOTH
     Q_INVOKABLE BleUart* bleDevice();
@@ -507,6 +510,9 @@ private:
     int mScreenRotation;
     bool mSpeedGaugeUseNegativeValues;
     bool mAskQmlLoad;
+    bool mShowFloatingWindow;
+    bool mFloatingWindowVisible;
+    QTimer *mFloatingPollTimer;
     bool mIgnoreCustomConfigs;
     bool mIgnoreTestVersion;
 
@@ -515,6 +521,8 @@ private:
     void startReconnect();
     void stopReconnect(bool suppress);
     void disconnectPortInternal(bool stopReconnect);
+    void refreshFloatingWindow();
+    void updateFloatingWindowValues();
 
 };
 
