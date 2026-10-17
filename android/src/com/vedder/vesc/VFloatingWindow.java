@@ -11,12 +11,12 @@
 
 package com.vedder.vesc;
 
-import android.app.Activity;
 import android.content.Context;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
+import android.os.Handler;
 import android.os.Looper;
 import android.view.Gravity;
 import android.view.MotionEvent;
@@ -29,6 +29,7 @@ final class VFloatingWindow {
     private static TextView sView;
     private static WindowManager sWindowManager;
     private static WindowManager.LayoutParams sLayoutParams;
+    private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
 
     private VFloatingWindow() {
     }
@@ -37,7 +38,7 @@ final class VFloatingWindow {
         runOnUiThread(context, new Runnable() {
             @Override
             public void run() {
-                if (!Utils.canDrawOverlays(context)) {
+                if (context == null || !Utils.canDrawOverlays(context)) {
                     return;
                 }
 
@@ -50,6 +51,8 @@ final class VFloatingWindow {
                     } catch (WindowManager.BadTokenException e) {
                         hideOnUiThread();
                     } catch (SecurityException e) {
+                        hideOnUiThread();
+                    } catch (RuntimeException e) {
                         hideOnUiThread();
                     }
                 }
@@ -82,8 +85,13 @@ final class VFloatingWindow {
             return;
         }
 
-        sWindowManager = (WindowManager) context.getSystemService(Context.WINDOW_SERVICE);
-        sView = new TextView(context.getApplicationContext());
+        Context applicationContext = context.getApplicationContext();
+        if (applicationContext == null) {
+            applicationContext = context;
+        }
+
+        sWindowManager = (WindowManager) applicationContext.getSystemService(Context.WINDOW_SERVICE);
+        sView = new TextView(applicationContext);
         sView.setTextColor(Color.WHITE);
         sView.setTextSize(TypedValue.COMPLEX_UNIT_SP, 14.0f);
         sView.setTypeface(Typeface.DEFAULT, Typeface.BOLD);
@@ -132,16 +140,10 @@ final class VFloatingWindow {
     }
 
     private static void runOnUiThread(Context context, Runnable action) {
-        Activity activity = Utils.getActivity(context);
-        if (activity == null) {
+        if (context == null) {
             return;
         }
-
-        if (Looper.myLooper() == Looper.getMainLooper()) {
-            action.run();
-        } else {
-            activity.runOnUiThread(action);
-        }
+        sMainHandler.post(action);
     }
 
     private static int dp(Context context, int value) {

@@ -67,6 +67,7 @@ private:
     Utility mUtil;
 
     static VescInterface *mVesc;
+    static bool mFloatingWindowVisible;
     static QObject *vescinterface_singletontype_provider(QQmlEngine *engine, QJSEngine *scriptEngine);
     static QObject *utility_singletontype_provider(QQmlEngine *engine, QJSEngine *scriptEngine);
 

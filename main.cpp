@@ -1038,15 +1038,14 @@ int main(int argc, char *argv[])
 
     // As background running is allowed, make sure to not update the GUI when
     // running in the background.
-    QObject::connect(a, &QApplication::applicationStateChanged, [&qml](Qt::ApplicationState state) {
-        const bool isBackground = state == Qt::ApplicationHidden ||
-                state == Qt::ApplicationSuspended;
-        if (isBackground) {
-            qml->setVisible(false);
-        } else {
+    QObject::connect(a, &QApplication::applicationStateChanged, [qml](Qt::ApplicationState state) {
+        if (state == Qt::ApplicationActive) {
+            qml->setFloatingWindowVisible(false);
             qml->setVisible(true);
+        } else {
+            qml->setFloatingWindowVisible(true);
+            qml->setVisible(false);
         }
-        qml->setFloatingWindowVisible(isBackground);
     });
 #else
     VescInterface *vesc = nullptr;

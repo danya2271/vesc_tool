@@ -25,6 +25,7 @@
 #include <QQmlContext>
 
 VescInterface *QmlUi::mVesc = nullptr;
+bool QmlUi::mFloatingWindowVisible = false;
 
 QmlUi::QmlUi(QObject *parent) : QObject(parent)
 {
@@ -93,6 +94,7 @@ void QmlUi::setVisible(bool visible)
 
 void QmlUi::setFloatingWindowVisible(bool visible)
 {
+    mFloatingWindowVisible = visible;
     if (mVesc) {
         mVesc->setFloatingWindowVisible(visible);
     }
@@ -200,6 +202,7 @@ QObject *QmlUi::vescinterface_singletontype_provider(QQmlEngine *engine, QJSEngi
     mVesc = vesc;
     vesc->fwConfig()->loadParamsXml(Utility::configPath("fw.xml"));
     Utility::configLoadLatest(vesc);
+    vesc->setFloatingWindowVisible(mFloatingWindowVisible);
 
     return vesc;
 }
