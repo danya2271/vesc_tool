@@ -13,11 +13,11 @@
 (define idle-current 1.0)
 (define min-erpm 760.0)
 
-;; 380 ERPM = 1 km/h.
-(define erpm-3kmh 760.0)
-(define erpm-max-current 2280.0)
-(define erpm-boost-end 4180.0)
-(define erpm-per-kmh 380.0)
+;; 358 ERPM = 1 km/h.
+(define erpm-3kmh 716.0) ; 2km/h
+(define erpm-max-current 1432.0)
+(define erpm-boost-end 3938.0)
+(define erpm-per-kmh 358.0)
 
 ;; ====== 2. THROTTLE AND SMOOTHNESS ======
 (define v-start 0.85)
