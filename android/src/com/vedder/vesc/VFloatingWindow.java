@@ -12,6 +12,7 @@
 package com.vedder.vesc;
 
 import android.content.Context;
+import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
@@ -21,6 +22,7 @@ import android.os.Looper;
 import android.view.Gravity;
 import android.view.MotionEvent;
 import android.view.View;
+import android.view.ViewConfiguration;
 import android.view.WindowManager;
 import android.util.TypedValue;
 import android.widget.TextView;
@@ -30,6 +32,7 @@ final class VFloatingWindow {
     private static WindowManager sWindowManager;
     private static WindowManager.LayoutParams sLayoutParams;
     private static final Handler sMainHandler = new Handler(Looper.getMainLooper());
+    private static volatile boolean sOpenHudRequested;
 
     private VFloatingWindow() {
     }
@@ -106,7 +109,7 @@ final class VFloatingWindow {
         background.setCornerRadius(dp(context, 12));
         background.setStroke(dp(context, 1), Color.argb(170, 180, 220, 255));
         sView.setBackground(background);
-        sView.setOnTouchListener(new DragListener());
+        sView.setOnTouchListener(new DragListener(applicationContext));
 
         int windowType = Build.VERSION.SDK_INT >= Build.VERSION_CODES.O ?
                 WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY :
@@ -146,15 +149,47 @@ final class VFloatingWindow {
         sMainHandler.post(action);
     }
 
+    static boolean consumeOpenHudRequest() {
+        boolean requested = sOpenHudRequested;
+        sOpenHudRequested = false;
+        return requested;
+    }
+
+    private static void openApplication(Context context) {
+        sOpenHudRequested = true;
+        Intent launchIntent = context.getPackageManager().getLaunchIntentForPackage(context.getPackageName());
+        if (launchIntent == null) {
+            sOpenHudRequested = false;
+            return;
+        }
+
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK |
+                              Intent.FLAG_ACTIVITY_REORDER_TO_FRONT |
+                              Intent.FLAG_ACTIVITY_SINGLE_TOP);
+        try {
+            context.startActivity(launchIntent);
+        } catch (RuntimeException e) {
+            sOpenHudRequested = false;
+        }
+    }
+
     private static int dp(Context context, int value) {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
     private static final class DragListener implements View.OnTouchListener {
+        private final Context context;
+        private final int touchSlop;
         private float startRawX;
         private float startRawY;
         private int startX;
         private int startY;
+        private boolean moved;
+
+        DragListener(Context context) {
+            this.context = context;
+            touchSlop = ViewConfiguration.get(context).getScaledTouchSlop();
+        }
 
         @Override
         public boolean onTouch(View view, MotionEvent event) {
@@ -168,13 +203,22 @@ final class VFloatingWindow {
                     startRawY = event.getRawY();
                     startX = sLayoutParams.x;
                     startY = sLayoutParams.y;
+                    moved = false;
                     return true;
                 case MotionEvent.ACTION_MOVE:
+                    if (Math.abs(event.getRawX() - startRawX) > touchSlop ||
+                            Math.abs(event.getRawY() - startRawY) > touchSlop) {
+                        moved = true;
+                    }
                     sLayoutParams.x = startX - Math.round(event.getRawX() - startRawX);
                     sLayoutParams.y = startY + Math.round(event.getRawY() - startRawY);
                     sWindowManager.updateViewLayout(view, sLayoutParams);
                     return true;
                 case MotionEvent.ACTION_UP:
+                    if (!moved) {
+                        openApplication(context);
+                    }
+                    return true;
                 case MotionEvent.ACTION_CANCEL:
                     return true;
                 default:

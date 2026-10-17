@@ -40,6 +40,7 @@ public:
     Q_INVOKABLE void disconnectBle();
     Q_INVOKABLE bool isConnected();
     Q_INVOKABLE bool isConnecting();
+    Q_INVOKABLE bool isScanning();
     Q_INVOKABLE void emitScanDone();
 
 signals:

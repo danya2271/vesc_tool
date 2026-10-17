@@ -77,6 +77,7 @@ public:
     static void showFloatingWindow(const QString &speed, const QString &power, const QString &voltage);
     static void updateFloatingWindow(const QString &speed, const QString &power, const QString &voltage);
     static void hideFloatingWindow();
+    static bool consumeFloatingWindowClick();
     Q_INVOKABLE static bool waitSignal(QObject *sender, QString signal, int timeoutMs);
     Q_INVOKABLE static void sleepWithEventLoop(int timeMs);
     Q_INVOKABLE static bool canUpdateBaudAllBlocking(VescInterface *vesc, int newBaud);

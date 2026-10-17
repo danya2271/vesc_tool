@@ -1728,6 +1728,17 @@ void Utility::hideFloatingWindow()
 #endif
 }
 
+bool Utility::consumeFloatingWindowClick()
+{
+#ifdef Q_OS_ANDROID
+    return QAndroidJniObject::callStaticMethod<jboolean>("com/vedder/vesc/Utils",
+                                                         "consumeFloatingWindowClick",
+                                                         "()Z");
+#else
+    return false;
+#endif
+}
+
 bool Utility::isBleScanEnabled()
 {
 #ifdef Q_OS_ANDROID

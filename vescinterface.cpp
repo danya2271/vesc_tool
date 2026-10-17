@@ -104,6 +104,8 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     mReconnectSuppressed = false;
     mReconnectForegroundActive = false;
     mReconnectWakeLock = false;
+    mBackgroundScanServiceActive = false;
+    mBackgroundScanWakeLock = false;
     mReconnectAttempts = 0;
     mSuppressConfigErrors = false;
     mReconnectGraceActive = false;
@@ -361,14 +363,27 @@ VescInterface::VescInterface(QObject *parent) : QObject(parent)
     mSpeedGaugeUseNegativeValues =  mSettings.value("speedGaugeUseNegativeValues", true).toBool();
     mAskQmlLoad =  mSettings.value("askQmlLoad", true).toBool();
     mShowFloatingWindow = mSettings.value("showFloatingWindow", false).toBool();
+    mAutoConnectPreferred = mSettings.value("autoConnectPreferred", false).toBool();
+    mBackgroundAutoConnectPreferred = mSettings.value("backgroundAutoConnectPreferred", false).toBool();
     mFloatingWindowVisible = false;
     mFloatingPollTimer = new QTimer(this);
     mFloatingPollTimer->setInterval(100);
     connect(mFloatingPollTimer, &QTimer::timeout, [this]() {
-        if (mFloatingWindowVisible && mShowFloatingWindow && isPortConnected()) {
+        if (mFloatingWindowVisible && (mShowFloatingWindow || mBackgroundAutoConnectPreferred) && isPortConnected()) {
             mCommands->getValuesSetup();
         }
     });
+
+#ifdef HAS_BLUETOOTH
+    mBackgroundScanTimer = new QTimer(this);
+    mBackgroundScanTimer->setInterval(10000);
+    connect(mBackgroundScanTimer, &QTimer::timeout, this, [this]() {
+        startBackgroundBleScan();
+    });
+    connect(mBleUart, &BleUart::scanDone, this, [this](QVariantMap devices, bool) {
+        tryAutoConnectPreferred(devices);
+    });
+#endif
 
     mCommands->setAppConfig(mAppConfig);
     mCommands->setMcConfig(mMcConfig);
@@ -843,6 +858,8 @@ void VescInterface::storeSettings()
     mSettings.setValue("speedGaugeUseNegativeValues", mSpeedGaugeUseNegativeValues);
     mSettings.setValue("askQmlLoad", mAskQmlLoad);
     mSettings.setValue("showFloatingWindow", mShowFloatingWindow);
+    mSettings.setValue("autoConnectPreferred", mAutoConnectPreferred);
+    mSettings.setValue("backgroundAutoConnectPreferred", mBackgroundAutoConnectPreferred);
     mSettings.sync();
 }
 
@@ -2212,15 +2229,43 @@ void VescInterface::setShowFloatingWindow(bool show)
     refreshFloatingWindow();
 }
 
+bool VescInterface::autoConnectPreferred() const
+{
+    return mAutoConnectPreferred;
+}
+
+void VescInterface::setAutoConnectPreferred(bool enabled)
+{
+    mAutoConnectPreferred = enabled;
+}
+
+bool VescInterface::backgroundAutoConnectPreferred() const
+{
+    return mBackgroundAutoConnectPreferred;
+}
+
+void VescInterface::setBackgroundAutoConnectPreferred(bool enabled)
+{
+    mBackgroundAutoConnectPreferred = enabled;
+#ifdef HAS_BLUETOOTH
+    updateBackgroundBleScan();
+#endif
+    refreshFloatingWindow();
+}
+
 void VescInterface::setFloatingWindowVisible(bool visible)
 {
     mFloatingWindowVisible = visible;
+#ifdef HAS_BLUETOOTH
+    updateBackgroundBleScan();
+#endif
     refreshFloatingWindow();
 }
 
 void VescInterface::refreshFloatingWindow()
 {
-    const bool shouldShow = mFloatingWindowVisible && mShowFloatingWindow &&
+    const bool shouldShow = mFloatingWindowVisible &&
+            (mShowFloatingWindow || mBackgroundAutoConnectPreferred) &&
             isPortConnected() && Utility::canDrawOverlays();
 
     if (shouldShow) {
@@ -2250,6 +2295,71 @@ void VescInterface::updateFloatingWindowValues()
 
     Utility::updateFloatingWindow(speedText, powerText, voltageText);
 }
+
+#ifdef HAS_BLUETOOTH
+void VescInterface::updateBackgroundBleScan()
+{
+    const bool keepAlive = mFloatingWindowVisible && mBackgroundAutoConnectPreferred;
+
+    if (keepAlive) {
+        if (!mBackgroundScanTimer->isActive()) {
+            mBackgroundScanTimer->start();
+        }
+
+        if (!mBackgroundScanServiceActive) {
+            Utility::startGnssForegroundService();
+            mBackgroundScanServiceActive = true;
+        }
+
+        if (!mWakeLockActive) {
+            mBackgroundScanWakeLock = setWakeLock(true);
+        }
+
+        startBackgroundBleScan();
+    } else {
+        mBackgroundScanTimer->stop();
+
+        if (!mReconnectActive && mBackgroundScanServiceActive) {
+            Utility::stopGnssForegroundService();
+            mBackgroundScanServiceActive = false;
+        }
+
+        if (mBackgroundScanWakeLock) {
+            setWakeLock(false);
+            mBackgroundScanWakeLock = false;
+        }
+    }
+}
+
+void VescInterface::startBackgroundBleScan()
+{
+    if (!mFloatingWindowVisible || !mBackgroundAutoConnectPreferred ||
+            isPortConnected() || mBleUart->isConnecting() || mBleUart->isScanning()) {
+        return;
+    }
+
+    mBleUart->startScan();
+}
+
+void VescInterface::tryAutoConnectPreferred(const QVariantMap &devices)
+{
+    if (devices.isEmpty() || isPortConnected() || mBleUart->isConnecting()) {
+        return;
+    }
+
+    const bool enabled = mFloatingWindowVisible ? mBackgroundAutoConnectPreferred : mAutoConnectPreferred;
+    if (!enabled) {
+        return;
+    }
+
+    for (const QString &address : devices.keys()) {
+        if (mBlePreferred.value(address, false)) {
+            connectBle(address);
+            return;
+        }
+    }
+}
+#endif
 
 #ifdef HAS_SERIALPORT
 QString VescInterface::getLastSerialPort() const
@@ -2439,11 +2549,17 @@ void VescInterface::stopReconnect(bool suppress)
     mReconnectTimer->stop();
     mReconnectActive = false;
     emit reconnectStateChanged(false, mReconnectAttempts);
-    Utility::stopGnssForegroundService();
+    if (!mBackgroundScanServiceActive) {
+        Utility::stopGnssForegroundService();
+    }
     if (mReconnectWakeLock) {
         setWakeLock(false);
         mReconnectWakeLock = false;
     }
+
+#ifdef HAS_BLUETOOTH
+    updateBackgroundBleScan();
+#endif
 }
 
 void VescInterface::cancelReconnect()
@@ -2495,6 +2611,11 @@ void VescInterface::reconnectTimerSlot()
     }
 
 #ifdef HAS_BLUETOOTH
+    if (mFloatingWindowVisible && mBackgroundAutoConnectPreferred && mLastConnType == CONN_BLE) {
+        startBackgroundBleScan();
+        return;
+    }
+
     // Do not tear down an in-flight Android GATT operation just because the
     // periodic reconnect timer fired. The controller timeout owns completion
     // of this attempt; the next timer tick will start a fresh one.

@@ -95,6 +95,30 @@ Item {
                     }
                 }
 
+                CheckBox {
+                    id: autoConnectPreferredBox
+                    Layout.fillWidth: true
+                    text: "Automatically connect to preferred BLE devices"
+                    checked: VescIf.autoConnectPreferred()
+                    visible: VescIf.hasBluetooth()
+                    enabled: visible
+                }
+
+                CheckBox {
+                    id: backgroundAutoConnectPreferredBox
+                    Layout.fillWidth: true
+                    text: "Search and connect to preferred BLE devices in background"
+                    checked: VescIf.backgroundAutoConnectPreferred()
+                    visible: Qt.platform.os === "android" && VescIf.hasBluetooth()
+                    enabled: visible
+
+                    onClicked: {
+                        if (checked && !Utility.canDrawOverlays()) {
+                            Utility.requestDrawOverlaysPermission()
+                        }
+                    }
+                }
+
                 RowLayout {
                     id: screenRotBox
                     Layout.fillWidth: true
@@ -164,6 +188,8 @@ Item {
             negativeSpeedBox.checked = VescIf.speedGaugeUseNegativeValues()
             screenOnBox.checked = VescIf.keepScreenOn()
             floatingWindowBox.checked = VescIf.showFloatingWindow()
+            autoConnectPreferredBox.checked = VescIf.autoConnectPreferred()
+            backgroundAutoConnectPreferredBox.checked = VescIf.backgroundAutoConnectPreferred()
             screenRotCombo.currentIndex = Math.max(0, Math.min(3, VescIf.getScreenRotation() / 90))
             qmlUiBox.checked = VescIf.getLoadQmlUiOnConnect()
             qmlUiAskBox.checked = VescIf.askQmlLoad()
@@ -177,6 +203,8 @@ Item {
             VescIf.setSpeedGaugeUseNegativeValues(negativeSpeedBox.checked)
             VescIf.setKeepScreenOn(screenOnBox.checked)
             VescIf.setShowFloatingWindow(floatingWindowBox.checked)
+            VescIf.setAutoConnectPreferred(autoConnectPreferredBox.checked)
+            VescIf.setBackgroundAutoConnectPreferred(backgroundAutoConnectPreferredBox.checked)
             VescIf.setScreenRotation(screenRotCombo.currentIndex * 90)
             VescIf.setLoadQmlUiOnConnect(qmlUiBox.checked)
             VescIf.setAskQmlLoad(qmlUiAskBox.checked)

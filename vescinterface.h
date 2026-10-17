@@ -169,6 +169,10 @@ public:
     Q_INVOKABLE void setAskQmlLoad(bool newAskQmlLoad);
     Q_INVOKABLE bool showFloatingWindow() const;
     Q_INVOKABLE void setShowFloatingWindow(bool show);
+    Q_INVOKABLE bool autoConnectPreferred() const;
+    Q_INVOKABLE void setAutoConnectPreferred(bool enabled);
+    Q_INVOKABLE bool backgroundAutoConnectPreferred() const;
+    Q_INVOKABLE void setBackgroundAutoConnectPreferred(bool enabled);
     void setFloatingWindowVisible(bool visible);
 
 #ifdef HAS_BLUETOOTH
@@ -482,6 +486,8 @@ private:
     bool mReconnectSuppressed;
     bool mReconnectForegroundActive;
     bool mReconnectWakeLock;
+    bool mBackgroundScanServiceActive;
+    bool mBackgroundScanWakeLock;
     int mReconnectAttempts;
     QElapsedTimer mReconnectHandshakeTimer;
     bool mSuppressConfigErrors;
@@ -511,8 +517,13 @@ private:
     bool mSpeedGaugeUseNegativeValues;
     bool mAskQmlLoad;
     bool mShowFloatingWindow;
+    bool mAutoConnectPreferred;
+    bool mBackgroundAutoConnectPreferred;
     bool mFloatingWindowVisible;
     QTimer *mFloatingPollTimer;
+#ifdef HAS_BLUETOOTH
+    QTimer *mBackgroundScanTimer;
+#endif
     bool mIgnoreCustomConfigs;
     bool mIgnoreTestVersion;
 
@@ -523,6 +534,11 @@ private:
     void disconnectPortInternal(bool stopReconnect);
     void refreshFloatingWindow();
     void updateFloatingWindowValues();
+#ifdef HAS_BLUETOOTH
+    void updateBackgroundBleScan();
+    void startBackgroundBleScan();
+    void tryAutoConnectPreferred(const QVariantMap &devices);
+#endif
 
 };
 

@@ -41,6 +41,9 @@ Item {
         if(opened){
             animationDuration = 500
             y = 0
+            if (!VescIf.isPortConnected() && VescIf.autoConnectPreferred() && !scanning) {
+                startBleScan()
+            }
         } else {
             y = Qt.binding(function() {return parent.height})
         }

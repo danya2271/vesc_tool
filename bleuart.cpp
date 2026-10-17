@@ -28,6 +28,7 @@ BleUart::BleUart(QObject *parent) : QObject(parent)
 {
     mControl = nullptr;
     mService = nullptr;
+    mDeviceDiscoveryAgent = nullptr;
     mUartServiceFound = false;
     mConnectDone = false;
     mScanFinished = true;
@@ -54,14 +55,22 @@ void BleUart::startScan()
 {
     init();
 
+    if (mDeviceDiscoveryAgent->isActive()) {
+        mDeviceDiscoveryAgent->stop();
+    }
+
     mDevs.clear();
-    mDeviceDiscoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
     mScanFinished = false;
+    mDeviceDiscoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
 }
 
 void BleUart::startConnect(QString addr)
 {
     init();
+
+    if (mDeviceDiscoveryAgent->isActive()) {
+        mDeviceDiscoveryAgent->stop();
+    }
 
     disconnectBle();
 
@@ -138,6 +147,11 @@ bool BleUart::isConnected()
 bool BleUart::isConnecting()
 {
     return mControl && !mConnectDone;
+}
+
+bool BleUart::isScanning()
+{
+    return mDeviceDiscoveryAgent && mDeviceDiscoveryAgent->isActive();
 }
 
 void BleUart::emitScanDone()

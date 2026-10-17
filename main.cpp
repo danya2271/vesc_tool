@@ -1040,8 +1040,12 @@ int main(int argc, char *argv[])
     // running in the background.
     QObject::connect(a, &QApplication::applicationStateChanged, [qml](Qt::ApplicationState state) {
         if (state == Qt::ApplicationActive) {
+            const bool openHud = Utility::consumeFloatingWindowClick();
             qml->setFloatingWindowVisible(false);
             qml->setVisible(true);
+            if (openHud) {
+                qml->openDefaultHud();
+            }
         } else {
             qml->setFloatingWindowVisible(true);
             qml->setVisible(false);

@@ -100,6 +100,15 @@ void QmlUi::setFloatingWindowVisible(bool visible)
     }
 }
 
+void QmlUi::openDefaultHud()
+{
+    if (!mEngine || mEngine->rootObjects().isEmpty()) {
+        return;
+    }
+
+    QMetaObject::invokeMethod(mEngine->rootObjects().first(), "openDefaultHud", Qt::QueuedConnection);
+}
+
 void QmlUi::startCustomGui(VescInterface *vesc, QString qmlFile, int width, int height)
 {
     if (mEngine) {

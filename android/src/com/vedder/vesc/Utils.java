@@ -75,6 +75,10 @@ public class Utils
         VFloatingWindow.hide(ctx);
     }
 
+    public static boolean consumeFloatingWindowClick() {
+        return VFloatingWindow.consumeOpenHudRequest();
+    }
+
     public static boolean checkLocationEnabled(Context ctx) {
         int locationMode = 0;
         String locationProviders;
