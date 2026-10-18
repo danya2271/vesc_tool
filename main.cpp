@@ -1051,6 +1051,7 @@ int main(int argc, char *argv[])
             qml->setVisible(false);
         }
     });
+    qml->setFloatingWindowVisible(a->applicationState() != Qt::ApplicationActive);
 #else
     VescInterface *vesc = nullptr;
     TcpHub *tcpHub = nullptr;

@@ -41,9 +41,6 @@ Item {
         if(opened){
             animationDuration = 500
             y = 0
-            if (!VescIf.isPortConnected() && VescIf.autoConnectPreferred() && !scanning) {
-                startBleScan()
-            }
         } else {
             y = Qt.binding(function() {return parent.height})
         }
@@ -70,7 +67,7 @@ Item {
     }
 
     function startBleScan() {
-        if (Utility.hasLocationPermission()) {
+        if (Utility.hasBlePermissions()) {
             scanning = true
             scanDotTimer.running = true
             bleModel.clear()
@@ -614,9 +611,9 @@ Item {
             return false
         }
         function onScanDone(bleDevices, done) {
-            if (done) {
-                scanDotTimer.running = false
-                scanning = false
+            scanning = !done && mBle.isScanning()
+            scanDotTimer.running = scanning
+            if (!scanning) {
                 scanButton.text = qsTr("Scan...")
             }
             var devices = [];
@@ -677,6 +674,7 @@ Item {
             // handshake completed, so ignore it while the controller is
             // already usable.
             if (!VescIf.reconnectActive() && !VescIf.reconnectGraceActive() &&
+                    !VescIf.preferredAutoConnectEnabled() &&
                     !VescIf.isPortConnected()) {
                 VescIf.emitMessageDialog("BLE Error", info, false, false)
                 enableDialog()

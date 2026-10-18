@@ -35,7 +35,8 @@ public:
     explicit BleUart(QObject *parent = nullptr);
     ~BleUart();
 
-    Q_INVOKABLE void startScan();
+    Q_INVOKABLE void startScan(bool requestPermissions = true, bool notifyUi = true);
+    Q_INVOKABLE void stopScan();
     Q_INVOKABLE void startConnect(QString addr);
     Q_INVOKABLE void disconnectBle();
     Q_INVOKABLE bool isConnected();
@@ -46,6 +47,7 @@ public:
 signals:
     void dataRx(QByteArray data);
     void scanDone(QVariantMap devs, bool done);
+    void deviceFound(QString address);
     void bleError(QString info);
     void connected();
     void unintentionalDisconnect();
@@ -84,6 +86,7 @@ private:
     QString mRxUuid;
     QString mTxUuid;
     bool mScanFinished;
+    bool mNotifyScanSignals;
     bool mInitDone;
     QTimer mConnectTimeoutTimer;
 

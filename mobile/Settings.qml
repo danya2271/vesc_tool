@@ -102,6 +102,12 @@ Item {
                     checked: VescIf.autoConnectPreferred()
                     visible: VescIf.hasBluetooth()
                     enabled: visible
+
+                    onClicked: {
+                        if (checked) {
+                            checked = Utility.requestBleScanPermission() && Utility.requestBleConnectPermission()
+                        }
+                    }
                 }
 
                 CheckBox {
@@ -113,6 +119,9 @@ Item {
                     enabled: visible
 
                     onClicked: {
+                        if (checked) {
+                            checked = Utility.requestBleScanPermission() && Utility.requestBleConnectPermission()
+                        }
                         if (checked && !Utility.canDrawOverlays()) {
                             Utility.requestDrawOverlaysPermission()
                         }

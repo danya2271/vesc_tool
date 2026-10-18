@@ -173,6 +173,7 @@ public:
     Q_INVOKABLE void setAutoConnectPreferred(bool enabled);
     Q_INVOKABLE bool backgroundAutoConnectPreferred() const;
     Q_INVOKABLE void setBackgroundAutoConnectPreferred(bool enabled);
+    Q_INVOKABLE bool preferredAutoConnectEnabled() const;
     void setFloatingWindowVisible(bool visible);
 
 #ifdef HAS_BLUETOOTH
@@ -470,6 +471,9 @@ private:
     QAndroidJniObject mWakeLock;
 #endif
     bool mWakeLockActive;
+    bool mWakeLockRequested;
+    bool mConnectionWakeLockRequested;
+    bool mConnectionForegroundActive;
 
     QFile mRtLogFile;
     QVector<LOG_DATA> mRtLogData;
@@ -484,10 +488,6 @@ private:
     QTimer *mReconnectTimer;
     bool mReconnectActive;
     bool mReconnectSuppressed;
-    bool mReconnectForegroundActive;
-    bool mReconnectWakeLock;
-    bool mBackgroundScanServiceActive;
-    bool mBackgroundScanWakeLock;
     int mReconnectAttempts;
     QElapsedTimer mReconnectHandshakeTimer;
     bool mSuppressConfigErrors;
@@ -522,7 +522,7 @@ private:
     bool mFloatingWindowVisible;
     QTimer *mFloatingPollTimer;
 #ifdef HAS_BLUETOOTH
-    QTimer *mBackgroundScanTimer;
+    QTimer *mPreferredScanTimer;
 #endif
     bool mIgnoreCustomConfigs;
     bool mIgnoreTestVersion;
@@ -534,10 +534,12 @@ private:
     void disconnectPortInternal(bool stopReconnect);
     void refreshFloatingWindow();
     void updateFloatingWindowValues();
+    bool updateWakeLock();
+    void updateConnectionBackgroundSupport();
 #ifdef HAS_BLUETOOTH
-    void updateBackgroundBleScan();
-    void startBackgroundBleScan();
-    void tryAutoConnectPreferred(const QVariantMap &devices);
+    void updatePreferredBleScan();
+    void startPreferredBleScan();
+    void tryAutoConnectPreferred(const QString &address);
 #endif
 
 };

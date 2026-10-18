@@ -32,6 +32,7 @@ BleUart::BleUart(QObject *parent) : QObject(parent)
     mUartServiceFound = false;
     mConnectDone = false;
     mScanFinished = true;
+    mNotifyScanSignals = true;
     mInitDone = false;
 
     mServiceUuid = "6e400001-b5a3-f393-e0a9-e50e24dcca9e";
@@ -51,26 +52,54 @@ BleUart::~BleUart() {
     }
 }
 
-void BleUart::startScan()
+void BleUart::startScan(bool requestPermissions, bool notifyUi)
 {
+    if (requestPermissions &&
+            (!Utility::requestBleScanPermission() || !Utility::requestBleConnectPermission())) {
+        if (notifyUi) {
+            emit scanDone(mDevs, true);
+        }
+        return;
+    }
+
     init();
 
     if (mDeviceDiscoveryAgent->isActive()) {
-        mDeviceDiscoveryAgent->stop();
+        mNotifyScanSignals = notifyUi;
+        if (notifyUi) {
+            emit scanDone(mDevs, false);
+        }
+        return;
     }
 
     mDevs.clear();
     mScanFinished = false;
+    mNotifyScanSignals = notifyUi;
     mDeviceDiscoveryAgent->start(QBluetoothDeviceDiscoveryAgent::LowEnergyMethod);
+    if (!mScanFinished && notifyUi) {
+        emit scanDone(mDevs, false);
+    }
+}
+
+void BleUart::stopScan()
+{
+    if (isScanning()) {
+        mDeviceDiscoveryAgent->stop();
+    }
+    if (!mScanFinished) {
+        scanFinished();
+    }
 }
 
 void BleUart::startConnect(QString addr)
 {
+    if (!Utility::requestBleConnectPermission()) {
+        return;
+    }
+
     init();
 
-    if (mDeviceDiscoveryAgent->isActive()) {
-        mDeviceDiscoveryAgent->stop();
-    }
+    stopScan();
 
     disconnectBle();
 
@@ -156,7 +185,6 @@ bool BleUart::isScanning()
 
 void BleUart::emitScanDone()
 {
-    mConnectTimeoutTimer.stop();
     emit scanDone(mDevs, mScanFinished);
 }
 
@@ -179,6 +207,10 @@ void BleUart::writeData(QByteArray data)
 
 void BleUart::addDevice(const QBluetoothDeviceInfo &dev)
 {
+    if (mScanFinished) {
+        return;
+    }
+
     if ((dev.coreConfigurations() & QBluetoothDeviceInfo::LowEnergyCoreConfiguration)) {
 #if defined(Q_OS_MACOS) || defined(Q_OS_IOS)
         // macOS and iOS do not expose the hardware address of BLTE devices, must use
@@ -213,16 +245,25 @@ void BleUart::addDevice(const QBluetoothDeviceInfo &dev)
         }
 #endif
 
-        mConnectTimeoutTimer.stop();
-        emit scanDone(mDevs, false);
+        if (mDevs.contains(addr)) {
+            emit deviceFound(addr);
+        }
+        if (mNotifyScanSignals) {
+            emit scanDone(mDevs, false);
+        }
     }
 }
 
 void BleUart::scanFinished()
 {
+    if (mScanFinished) {
+        return;
+    }
+
     mScanFinished = true;
-    mConnectTimeoutTimer.stop();
-    emit scanDone(mDevs, true);
+    if (mNotifyScanSignals) {
+        emit scanDone(mDevs, true);
+    }
 }
 
 void BleUart::deviceScanError(QBluetoothDeviceDiscoveryAgent::Error e)
@@ -230,7 +271,9 @@ void BleUart::deviceScanError(QBluetoothDeviceDiscoveryAgent::Error e)
     qWarning() << "BLE Scan error: " << e;
     mDevs.clear();
     mScanFinished = true;
-    emit scanDone(mDevs, true);
+    if (mNotifyScanSignals) {
+        emit scanDone(mDevs, true);
+    }
     QString errorStr = tr("BLE Scan error: ") + Utility::QEnumToQString(e);
 
 #ifdef Q_OS_ANDROID
@@ -238,8 +281,9 @@ void BleUart::deviceScanError(QBluetoothDeviceDiscoveryAgent::Error e)
                 "location service are activated.";
 #endif
 
-    mConnectTimeoutTimer.stop();
-    emit bleError(errorStr);
+    if (mNotifyScanSignals) {
+        emit bleError(errorStr);
+    }
 }
 
 void BleUart::serviceDiscovered(const QBluetoothUuid &gatt)
@@ -449,9 +493,6 @@ void BleUart::init()
         return;
     }
 
-    Utility::requestBleScanPermission();
-    Utility::requestBleConnectPermission();
-
     mDeviceDiscoveryAgent = new QBluetoothDeviceDiscoveryAgent(this);
 
     connect(mDeviceDiscoveryAgent, SIGNAL(deviceDiscovered(const QBluetoothDeviceInfo&)),
@@ -459,6 +500,7 @@ void BleUart::init()
     connect(mDeviceDiscoveryAgent, SIGNAL(error(QBluetoothDeviceDiscoveryAgent::Error)),
             this, SLOT(deviceScanError(QBluetoothDeviceDiscoveryAgent::Error)));
     connect(mDeviceDiscoveryAgent, SIGNAL(finished()), this, SLOT(scanFinished()));
+    connect(mDeviceDiscoveryAgent, SIGNAL(canceled()), this, SLOT(scanFinished()));
 
     mInitDone = true;
 

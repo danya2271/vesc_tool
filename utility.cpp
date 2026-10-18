@@ -286,14 +286,30 @@ bool Utility::requestFilePermission()
     return true;
 }
 
+bool Utility::hasBlePermissions()
+{
+#ifdef Q_OS_ANDROID
+    if (QtAndroid::androidSdkVersion() >= 31) {
+        return QtAndroid::checkPermission("android.permission.BLUETOOTH_SCAN") == QtAndroid::PermissionResult::Granted &&
+                QtAndroid::checkPermission("android.permission.BLUETOOTH_CONNECT") == QtAndroid::PermissionResult::Granted;
+    }
+
+    return hasLocationPermission();
+#else
+    return true;
+#endif
+}
+
 bool Utility::requestBleScanPermission()
 {
 #ifdef Q_OS_ANDROID
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
-    QtAndroid::PermissionResult r = QtAndroid::checkPermission("android.permission.BLUETOOTH_SCAN");
+    const QString permission = QtAndroid::androidSdkVersion() >= 31 ?
+                "android.permission.BLUETOOTH_SCAN" : "android.permission.ACCESS_FINE_LOCATION";
+    QtAndroid::PermissionResult r = QtAndroid::checkPermission(permission);
     if(r == QtAndroid::PermissionResult::Denied) {
-        QtAndroid::requestPermissionsSync( QStringList() << "android.permission.BLUETOOTH_SCAN", 10000);
-        r = QtAndroid::checkPermission("android.permission.BLUETOOTH_SCAN");
+        QtAndroid::requestPermissionsSync(QStringList() << permission, 10000);
+        r = QtAndroid::checkPermission(permission);
         if(r == QtAndroid::PermissionResult::Denied) {
             return false;
         }
@@ -312,6 +328,10 @@ bool Utility::requestBleConnectPermission()
 {
 #ifdef Q_OS_ANDROID
 #if QT_VERSION >= QT_VERSION_CHECK(5, 10, 0)
+    if (QtAndroid::androidSdkVersion() < 31) {
+        return true;
+    }
+
     QtAndroid::PermissionResult r = QtAndroid::checkPermission("android.permission.BLUETOOTH_CONNECT");
     if(r == QtAndroid::PermissionResult::Denied) {
         QtAndroid::requestPermissionsSync( QStringList() << "android.permission.BLUETOOTH_CONNECT", 10000);
@@ -1649,6 +1669,28 @@ void Utility::stopGnssForegroundService()
 #ifdef Q_OS_ANDROID
     QAndroidJniObject::callStaticMethod<void>("com/vedder/vesc/Utils",
                                               "stopVForegroundService",
+                                              "(Landroid/content/Context;)V",
+                                              QtAndroid::androidActivity().object());
+#endif
+}
+
+bool Utility::startConnectionForegroundService()
+{
+#ifdef Q_OS_ANDROID
+    return QAndroidJniObject::callStaticMethod<jboolean>("com/vedder/vesc/Utils",
+                                                        "startConnectionForegroundService",
+                                                        "(Landroid/content/Context;)Z",
+                                                        QtAndroid::androidActivity().object());
+#else
+    return true;
+#endif
+}
+
+void Utility::stopConnectionForegroundService()
+{
+#ifdef Q_OS_ANDROID
+    QAndroidJniObject::callStaticMethod<void>("com/vedder/vesc/Utils",
+                                              "stopConnectionForegroundService",
                                               "(Landroid/content/Context;)V",
                                               QtAndroid::androidActivity().object());
 #endif

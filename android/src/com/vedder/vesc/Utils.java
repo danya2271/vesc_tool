@@ -50,6 +50,16 @@ public class Utils
         ctx.stopService(intent);
     }
 
+    public static boolean startConnectionForegroundService(Context ctx) {
+        return VConnectionService.start(ctx);
+    }
+
+    public static void stopConnectionForegroundService(Context ctx) {
+        if (ctx != null) {
+            ctx.stopService(new Intent(ctx, VConnectionService.class));
+        }
+    }
+
     public static boolean canDrawOverlays(Context ctx) {
         return Build.VERSION.SDK_INT < Build.VERSION_CODES.M || Settings.canDrawOverlays(ctx);
     }

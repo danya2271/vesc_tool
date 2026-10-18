@@ -67,6 +67,7 @@ public:
     Q_INVOKABLE static QString uuid2Str(QByteArray uuid, bool space);
     Q_INVOKABLE static bool requestFilePermission();
     Q_INVOKABLE static bool hasLocationPermission();
+    Q_INVOKABLE static bool hasBlePermissions();
     Q_INVOKABLE static bool requestBleScanPermission();
     Q_INVOKABLE static bool requestBleConnectPermission();
     Q_INVOKABLE static void keepScreenOn(bool on);
@@ -114,6 +115,8 @@ public:
     Q_INVOKABLE static QVariantList getNetworkAddresses();
     Q_INVOKABLE static void startGnssForegroundService();
     Q_INVOKABLE static void stopGnssForegroundService();
+    static bool startConnectionForegroundService();
+    static void stopConnectionForegroundService();
     Q_INVOKABLE static bool isBleScanEnabled();
     Q_INVOKABLE static QString strCrc32(QString str);
     Q_INVOKABLE static QString readInternalImuType(VescInterface *vesc);
