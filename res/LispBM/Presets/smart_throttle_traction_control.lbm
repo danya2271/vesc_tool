@@ -24,7 +24,7 @@
 (define v-end 2.67)
 (define expo-weight 0.33)
 
-(define ramp-start 0.175)
+(define ramp-start 0.075)
 (define ramp-fast 0.01)
 (define ramp-erpm-max 4200.0)
 (define ramp-neg 0.32)
@@ -38,7 +38,7 @@
 (define v-min 41.7)
 (define v-cutoff 36.5)
 
-(define fw-max-current 21.0)
+(define fw-max-current 17.0)
 (define fw-idle-current 5.0)
 (define fw-throttle-start 0.7)
 
