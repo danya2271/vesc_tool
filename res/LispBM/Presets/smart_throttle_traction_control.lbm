@@ -7,7 +7,7 @@
 ;; for true slip detection.
 
 ;; ====== 1. BASIC SETTINGS ======
-(define base-current 45.5)
+(define base-current 52.5)
 (define peak-current 63.0)
 (define boost-current 78.0)
 (define idle-current 1.0)
