@@ -62,7 +62,7 @@
 (define accel-soft-band-ms2 0.5)
 (define slip-threshold-erpm 400.0)
 (define penalty-factor 0.10)
-(define recovery-rate 0.02)
+(define recovery-rate 0.004)
 (define envelope-soft-band-erpm 200.0)
 
 ;; ====== 4. RUNTIME STATE ======
@@ -77,8 +77,8 @@
 (define motion-sample-dt motion-sample-time)
 (define motion-updated 0)
 (define motion-initialized 0)
-(define motion-speed-alpha 0.35)
-(define motion-accel-alpha 0.35)
+(define motion-speed-alpha 0.08)
+(define motion-accel-alpha 0.08)
 (define speed-filtered-erpm 0.0)
 (define speed-last-sampled-erpm 0.0)
 (define measured-accel-ms2 0.0)
@@ -371,7 +371,7 @@
                 traction-cut))))
 
 (defun get-governed-current (requested erpm linear-throttle)
-    (let ((minimum-current (clamp idle-current 0.0 requested)))
+    (let ((minimum-current idle-current))
         (progn
             (update-accel-ceiling requested minimum-current linear-throttle)
             (let ((traction-current (* requested (get-traction-multiplier erpm linear-throttle)))
