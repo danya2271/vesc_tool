@@ -7,9 +7,9 @@
 ;; for true slip detection.
 
 ;; ====== 1. BASIC SETTINGS ======
-(define base-current 40.5)
-(define peak-current 62.0)
-(define boost-current 75.0)
+(define base-current 45.5)
+(define peak-current 63.0)
+(define boost-current 78.0)
 (define idle-current 1.0)
 (define min-erpm 760.0)
 
@@ -25,7 +25,7 @@
 (define expo-weight 0.33)
 
 (define ramp-start 0.075)
-(define ramp-fast 0.01)
+(define ramp-fast 0.05)
 (define ramp-erpm-max 4200.0)
 (define ramp-neg 0.32)
 (define loop-time 0.0005)
@@ -71,8 +71,8 @@
 (define adc-filtered 0.0)
 (define adc-alpha 0.28)
 
-;; Motion estimator samples no faster than 100 Hz using measured elapsed time.
-(define motion-sample-time 0.01)
+;; Motion estimator samples no faster than 500 Hz using measured elapsed time.
+(define motion-sample-time 0.002)
 (define motion-sample-elapsed 0.0)
 (define motion-sample-dt motion-sample-time)
 (define motion-updated 0)
