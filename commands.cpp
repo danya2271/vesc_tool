@@ -2289,6 +2289,32 @@ void Commands::lispSetTractionControlConfig(bool enabled,
     lispSendReplCmd(command);
 }
 
+void Commands::lispSetGearboxSoundConfig(bool enabled,
+                                        double startSpeedKmh,
+                                        double fullSpeedKmh,
+                                        double logCurve,
+                                        double erpmPerKmh,
+                                        double idleVoltage,
+                                        double maxVoltage,
+                                        double baseFrequency,
+                                        double frequencySpan,
+                                        double responseTime)
+{
+    const QString command = QString("(gs-set-config %1 %2 %3 %4 %5 %6 %7 %8 %9 %10)")
+            .arg(enabled ? 1 : 0)
+            .arg(startSpeedKmh, 0, 'f', 3)
+            .arg(fullSpeedKmh, 0, 'f', 3)
+            .arg(logCurve, 0, 'f', 3)
+            .arg(erpmPerKmh, 0, 'f', 3)
+            .arg(idleVoltage, 0, 'f', 4)
+            .arg(maxVoltage, 0, 'f', 4)
+            .arg(baseFrequency, 0, 'f', 3)
+            .arg(frequencySpan, 0, 'f', 3)
+            .arg(responseTime, 0, 'f', 4);
+
+    lispSendReplCmd(command);
+}
+
 void Commands::setBleName(QString name)
 {
     VByteArray vb;

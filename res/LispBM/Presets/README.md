@@ -39,6 +39,58 @@ missing acknowledgements. EEPROM slots 0–8 are reserved for this preset; do no
 share them with another script. Failed/incomplete writes invalidate the version
 marker so the preset can fall back to defaults on restart.
 
+## Straight-cut gearbox sound
+
+The Android **LispBM → Sound** tab configures four continuous motor tones in the
+same preset. Upload and run the updated **Smart Traction Preset** once; the
+application update alone cannot add sound to an older script on the controller.
+The controller firmware must support `foc-play-tone` and `foc-play-stop`.
+
+Sound is enabled by default. It starts whenever the preset supplies drive or
+preload current and stops when that current stops, the startup interlock is
+active, battery cutoff is reached, or sound is disabled. Releasing the throttle
+keeps the sound playing if coasting preload is still active. The default
+preload level is a very quiet **0.02 V**; set it to zero for silent preload.
+Actual audibility depends on the motor and controller.
+
+The throttle raises volume above the preload level. The ratio of delivered
+commanded current to requested current, excluding preload, and the TC multiplier
+reduce this extra volume when traction or acceleration limiting reduces drive.
+The quieter preload tone continues during limiting. Current ramping is also
+reflected in the volume, so holding full throttle does not hold full volume
+while TC cuts power. Frequency continues to follow motor speed.
+
+Below **10 km/h**, the fundamental stays at **220 Hz**. Above it, pitch follows
+`ln(1 + curve * position) / ln(1 + curve)`, with speed position clamped between
+the start and full-pitch speeds. Defaults reach **1720 Hz at 60 km/h**, with a
+curve of **4**. The second and third harmonics and a slightly detuned subharmonic
+produce the gear whine. Pitch and throttle volume are smoothed independently
+of the current loop in a 50 Hz LispBM context. Function bodies are stored in
+flash to leave the STM32 LispBM heap available for both running contexts.
+
+The tab exposes enable, start and full-pitch speeds, logarithmic curve, speed
+calibration in ERPM per km/h, preload and maximum voltage, base frequency,
+frequency rise, and response time. Sound calibration defaults to the preset's
+`erpm-per-kmh`; if you change wheel or reduction geometry, update both. The
+maximum level defaults to **1.15 V** and is capped at **2 V** for the **sum**
+of the four tone amplitudes, not each individual channel.
+
+**Read from controller**, **Defaults**, and **Apply and save** work like the
+Traction tab. Saving requires stopping and releasing the throttle. Changes
+while moving apply in RAM; stop and apply again to save. EEPROM addresses
+**16–26** hold sound settings independently of traction settings in **0–8**.
+Invalid or incomplete stored sound settings fall back to defaults.
+
+The equivalent REPL commands are:
+
+```lisp
+(gs-get-config)
+(gs-set-config 1 10.0 60.0 4.0 358.0 0.02 1.15 220.0 1500.0 0.12)
+```
+
+Arguments follow the tab's order, beginning with enable. Disabling sound does
+not disable traction control or the acceleration governor.
+
 ## Smooth limiting and preload
 
 The acceleration governor maintains a current ceiling instead of multiplying

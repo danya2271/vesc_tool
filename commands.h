@@ -295,6 +295,16 @@ public slots:
                                                   double penaltyFactor,
                                                   double recoveryRate,
                                                   double envelopeSoftBandErpm);
+    Q_INVOKABLE void lispSetGearboxSoundConfig(bool enabled,
+                                              double startSpeedKmh,
+                                              double fullSpeedKmh,
+                                              double logCurve,
+                                              double erpmPerKmh,
+                                              double idleVoltage,
+                                              double maxVoltage,
+                                              double baseFrequency,
+                                              double frequencySpan,
+                                              double responseTime);
 
     void setBleName(QString name);
     void setBlePin(QString pin);

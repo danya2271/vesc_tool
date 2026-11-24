@@ -458,6 +458,10 @@ Item {
             TabButton {
                 text: "Traction"
             }
+
+            TabButton {
+                text: "Sound"
+            }
         }
 
         StackLayout {
@@ -1168,6 +1172,20 @@ Item {
                     }
                 }
             }
+
+            GearboxSound {
+                id: gearboxSoundPage
+                mCommands: lispPageItem.mCommands
+                connected: VescIf.isPortConnected()
+                active: lispTabBar.currentIndex === 4
+            }
+        }
+    }
+
+    Connections {
+        target: VescIf
+        function onPortConnectedChanged() {
+            gearboxSoundPage.connected = VescIf.isPortConnected()
         }
     }
 

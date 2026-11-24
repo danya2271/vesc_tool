@@ -101,8 +101,12 @@
 (define vt-tc-on traction-control-enabled)
 (define vt-al-on acceleration-limit-enabled)
 (define vt-tc-cut 1.0)
+(define gs-requested-current 0.0)
 
 ;; ====== 5. HELPERS AND EEPROM CONFIGURATION ======
+;; Keep function bodies in flash, leaving RAM for the control and audio contexts.
+@const-start
+
 (defun clamp (value low high)
     (if (< value low)
         low
@@ -380,7 +384,151 @@
                                      (min-value requested accel-current-ceiling))))
                 (clamp (min-value traction-current accel-current) minimum-current requested)))))
 
-;; ====== 8. MAIN CONTROL LOOP ======
+@const-end
+
+;; ====== 8. STRAIGHT-CUT GEARBOX SOUND ======
+;; Settings: enabled, log start km/h, full pitch km/h, log curve,
+;; ERPM per km/h, preload V, maximum total V, base Hz, span Hz, response s.
+;; EEPROM 16..26 is independent of traction settings in 0..8.
+(define gs-default-config (list 1.0 10.0 60.0 4.0 erpm-per-kmh 0.02 1.15 220.0 1500.0 0.12))
+(define gs-config gs-default-config)
+(define gs-min-config '(0.0 0.0 1.0 0.1 1.0 0.0 0.0 50.0 0.0 0.02))
+(define gs-max-config '(1.0 100.0 200.0 20.0 10000.0 0.25 2.0 1000.0 4000.0 1.0))
+(define gs-playing 0)
+(define gs-level 0.0)
+(define gs-pitch 220.0)
+(define gs-last-time (systime))
+
+;; Keep audio function bodies in flash to preserve the STM32 LispBM heap.
+@const-start
+
+(defun gs-valid-config (settings)
+    (let ((valid (= (length settings) 10)))
+        (if valid
+            (progn
+                (looprange index 0 10
+                    (let ((value (ix settings index)))
+                        (setvar 'valid
+                            (and valid (number? value)
+                                 (>= value (ix gs-min-config index))
+                                 (<= value (ix gs-max-config index))))))
+                (and valid
+                     (> (ix settings 2) (ix settings 1))
+                     (>= (ix settings 6) (ix settings 5))))
+            nil)))
+
+(defun gs-load-config ()
+    (let ((version (eeprom-read-i 16)))
+        (if (and (number? version) (= version 1))
+            (let ((settings (map (lambda (address) (eeprom-read-f address))
+                                '(17 18 19 20 21 22 23 24 25 26))))
+                (if (gs-valid-config settings)
+                    (setvar 'gs-config settings))))))
+
+(defun gs-stop ()
+    (progn
+        (if (= gs-playing 1) (foc-play-stop))
+        (setvar 'gs-playing 0)
+        (setvar 'gs-level 0.0)))
+
+(defun gs-save-config ()
+    (let ((saved (eeprom-store-i 16 0))
+          (settings gs-config))
+        (progn
+            (looprange index 0 10
+                (setvar 'saved
+                    (and saved (eeprom-store-f (+ 17 index) (ix settings index)))))
+            (and saved (eeprom-store-i 16 1)))))
+
+(defun gs-get-config ()
+    (print (str-merge "GS_CONFIG_V1 "
+        (str-join (map (lambda (value) (str-from-n value "%.4f")) gs-config) " "))))
+
+(defun gs-set-config (enabled start-speed full-speed curve calibration idle-vol max-vol base-hz span-hz response)
+    (let ((settings (list (if (= enabled 0) 0.0 1.0)
+                         start-speed full-speed curve calibration
+                         idle-vol max-vol base-hz span-hz response)))
+        (if (gs-valid-config settings)
+            (progn
+                (setvar 'gs-config settings)
+                (if (= enabled 0) (gs-stop))
+                (if (tc-vehicle-stopped)
+                    (progn
+                        (setvar 'tc-saving 1)
+                        (set-current 0.0)
+                        (setvar 'current-out 0.0)
+                        (gs-stop)
+                        (if (gs-save-config)
+                            (print "GS_CONFIG_SAVED")
+                            (print "GS_CONFIG_SAVE_FAILED"))
+                        (setvar 'control-last-time (systime))
+                        (setvar 'tc-saving 0))
+                    (print "GS_CONFIG_APPLIED_RAM_ONLY_STOP_VEHICLE_TO_SAVE"))
+                (gs-get-config))
+            (print "GS_CONFIG_INVALID"))))
+
+;; Normalized logarithmic pitch rise starts at 10 km/h by default.
+;; Below that speed the quiet base tone still follows active preload.
+(defun gs-speed-position (speed settings)
+    (let ((position (clamp (/ (- speed (ix settings 1))
+                             (- (ix settings 2) (ix settings 1))) 0.0 1.0))
+          (curve (ix settings 3)))
+        (/ (log (+ 1.0 (* curve position))) (log (+ 1.0 curve)))))
+
+;; Keep preload almost silent. Both the delivered current after ramping
+;; and the TC multiplier reduce the throttle-dependent harmonics.
+(defun gs-drive-level ()
+    (let ((drive (clamp (/ (- current-out idle-current)
+                          (max-value 0.01 (- gs-requested-current idle-current))) 0.0 1.0)))
+        (* (clamp (/ vt-throttle 100.0) 0.0 1.0)
+           (min-value drive vt-tc-cut))))
+
+(defun gs-step ()
+    (let ((settings gs-config)
+          (dt (clamp (secs-since gs-last-time) 0.001 0.1)))
+        (progn
+            (setvar 'gs-last-time (systime))
+            (if (and (> (ix settings 0) 0.0)
+                     (= throttle-armed 1)
+                     (= tc-saving 0)
+                     (< (secs-since control-last-time) 0.1)
+                     (> current-out 0.01)
+                     (> (get-vin) v-cutoff))
+                (let ((speed (/ (abs (get-rpm)) (ix settings 4)))
+                      (target-level (gs-drive-level))
+                      (response (ix settings 9)))
+                    (let ((alpha (/ dt (+ response dt)))
+                          (target-pitch (+ (ix settings 7)
+                                           (* (ix settings 8) (gs-speed-position speed settings)))))
+                        (progn
+                            (if (= gs-playing 0) (setvar 'gs-pitch target-pitch))
+                            (setvar 'gs-pitch (+ gs-pitch (* alpha (- target-pitch gs-pitch))))
+                            (setvar 'gs-level (+ gs-level (* alpha (- target-level gs-level))))
+                            (let ((voltage (+ (ix settings 5)
+                                              (* gs-level (- (ix settings 6) (ix settings 5)))))
+                                  (third (+ 0.12 (* gs-level 0.25))))
+                                ;; Bound the SUM of the four amplitudes to the configured V.
+                                (let ((fundamental (/ voltage (+ 1.85 third))))
+                                    (progn
+                                        (foc-play-tone 0 gs-pitch fundamental)
+                                        (foc-play-tone 1 (* gs-pitch 2.0) (* fundamental 0.50))
+                                        (foc-play-tone 2 (* gs-pitch 3.0) (* fundamental third))
+                                        (foc-play-tone 3 (* gs-pitch 0.503) (* fundamental 0.35))
+                                        (setvar 'gs-playing 1)))))))
+                (gs-stop)))))
+
+;; Audio runs at 50 Hz, independently of the 0.5 ms current loop.
+(defun gs-loop ()
+    (loopwhile t
+        (progn
+            (gs-step)
+            (sleep 0.02))))
+
+@const-end
+
+;; ====== 9. MAIN CONTROL LOOP ======
+@const-start
+
 (defun control-step ()
     (progn
         (setvar 'control-dt (clamp (secs-since control-last-time) 0.0001 0.05))
@@ -451,10 +599,15 @@
                                                         (setvar 'vt-tc-on traction-control-enabled)
                                                         (setvar 'vt-al-on acceleration-limit-enabled)
                                                         (setvar 'vt-tc-cut traction-cut)
-                                                        (setvar 'vt-limit-current accel-current-ceiling)))))))))))))))
+                                                        (setvar 'vt-limit-current accel-current-ceiling)
+                                                        (setvar 'gs-requested-current requested-current)))))))))))))))
+
+@const-end
 
 (tc-load-config)
+(gs-load-config)
 (setvar 'control-last-time (systime))
+(spawn 256 gs-loop)
 (loopwhile t
     (progn
         (control-step)

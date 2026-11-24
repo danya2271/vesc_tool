@@ -60,6 +60,7 @@
         <file>Packages.qml</file>
         <file>SetupWizardIMU.qml</file>
         <file>Lisp.qml</file>
+        <file>GearboxSound.qml</file>
         <file>RtDataBlackGreenRed.qml</file>
         <file>DragTest.qml</file>
 
