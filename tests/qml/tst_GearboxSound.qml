@@ -33,7 +33,26 @@ TestCase {
     }
 
     function reply(values) {
-        commands.lispPrintReceived("GS_CONFIG_V1 " + values.join(" "))
+        // Match the actual VESC print extension and COMM_LISP_PRINT payload.
+        commands.lispPrintReceived('"GS_CONFIG_V1 ' + values.join(" ") + '"\u0000')
+    }
+
+    function test_readback_formats_data() {
+        return [
+            {tag: "desktop", prefix: "", suffix: ""},
+            {tag: "firmware", prefix: '"', suffix: '"'},
+            {tag: "firmware_nul", prefix: '"', suffix: '"\u0000'},
+            {tag: "repl", prefix: '> "', suffix: '"\r\n'},
+            {tag: "combined_messages", prefix: '"GS_CONFIG_SAVED"\r\n"', suffix: '"\u0000'}
+        ]
+    }
+
+    function test_readback_formats(data) {
+        page.requestConfig()
+        commands.lispPrintReceived(data.prefix + "GS_CONFIG_V1 " + page.defaults.join(" ") + data.suffix)
+        verify(!page.pending)
+        compare(page.controllerState, "Controller sound: ON")
+        compare(page.config[9], 0.12)
     }
 
     function test_readback() {
@@ -121,5 +140,20 @@ TestCase {
         compare(preload.realValue, 0.01)
         page.config = page.defaults.slice(0)
         compare(preload.realValue, 0.02)
+    }
+
+    function test_controller_rejects_settings() {
+        page.applyConfig()
+        commands.lispPrintReceived('"GS_CONFIG_INVALID"\u0000')
+        verify(!page.pending)
+        compare(page.controllerState, "Controller sound: settings rejected")
+    }
+
+    function test_timeout() {
+        page.requestConfig()
+        compare(page.controllerState, "Controller sound: reading...")
+        tryCompare(page, "pending", false, 6500)
+        compare(page.controllerState, "Controller sound: no response")
+        verify(page.configStatus.indexOf("No acknowledgement") >= 0)
     }
 }

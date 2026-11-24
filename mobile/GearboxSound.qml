@@ -57,6 +57,7 @@ Item {
         pending = true
         saving = false
         saveResult = ""
+        controllerState = "Controller sound: reading..."
         configStatus = "Reading from controller..."
         timeoutTimer.restart()
         mCommands.lispSendReplCmd("(gs-get-config)")
@@ -73,6 +74,7 @@ Item {
         pending = true
         saving = true
         saveResult = ""
+        controllerState = "Controller sound: applying..."
         configStatus = "Waiting for controller acknowledgement..."
         timeoutTimer.restart()
         mCommands.lispSetGearboxSoundConfig(config[0] !== 0, config[1], config[2], config[3], config[4],
@@ -90,17 +92,22 @@ Item {
         } else if (str.indexOf("GS_CONFIG_APPLIED_RAM_ONLY") >= 0) {
             saveResult = "Applied in RAM only; stop and release throttle, then apply again to save"
         } else if (str.indexOf("GS_CONFIG_INVALID") >= 0) {
+            controllerState = "Controller sound: settings rejected"
             configStatus = "Controller rejected invalid sound settings"
             pending = false
             timeoutTimer.stop()
             return
         }
 
-        var match = str.match(/(?:^|\n)GS_CONFIG_V1\s+([^\r\n]+)/)
+        // VESC's print extension quotes strings; desktop LispBM may print them
+        // verbatim. COMM_LISP_PRINT can also retain the packet's trailing NUL.
+        var text = str.replace(/\u0000/g, "")
+        var match = text.match(/(?:^|[\r\n])\s*(?:>\s*)?"?GS_CONFIG_V1[ \t]+([^\r\n]+)/)
         if (!match) {
             return
         }
-        var tokens = match[1].trim().split(/\s+/)
+        var payload = match[1].trim().replace(/"$/, "")
+        var tokens = payload.trim().split(/\s+/)
         var values = []
         for (var i = 0; i < tokens.length; i++) {
             values.push(Number(tokens[i]))
@@ -143,6 +150,7 @@ Item {
         id: timeoutTimer
         interval: 6000
         onTriggered: {
+            soundPage.controllerState = "Controller sound: no response"
             soundPage.configStatus = saveResult.length > 0 ? saveResult + "; readback timed out" :
                 "No acknowledgement. Upload and run the updated Smart Traction Preset; check REPL errors."
             soundPage.pending = false
